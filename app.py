@@ -4,10 +4,9 @@ import threading
 import asyncio
 from datetime import datetime, timedelta
 from flask import Flask
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import ReplyKeyboardMarkup, KeyboardButton, Update
 from telegram.ext import (
     Application,
-    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     ConversationHandler,
@@ -28,32 +27,30 @@ VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY")
 ADMIN_BKASH = os.getenv("ADMIN_BKASH", "Not Set")
 ADMIN_BINANCE = os.getenv("ADMIN_BINANCE", "Not Set")
 
-# যে গ্রুপে OTP ফরওয়ার্ড হবে তার Chat ID
+# যে গ্রুপে OTP ফরওয়ার্ড হবে
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID") 
 
 USD_TO_BDT = 125.0
 
-# Render Free Tier Keep-Alive & UptimeRobot Server
+# Render Keep-Alive
 flask_app = Flask("")
 
 @flask_app.route("/")
 def home():
-    return "Bot is Alive & Running on Render!", 200
+    return "Bot is Alive & Running!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
-# In-Memory Databases
+# Databases
 users_db = {}
 pending_deposits = {}
 
-# Custom Service Prices in BDT
+# Custom Service Prices in BDT (শুধু Telegram ও WhatsApp)
 CUSTOM_PRICES_BDT = {
-    "tg": {"name": "Telegram ✈️", "price_bdt": 60.0},
-    "wa": {"name": "WhatsApp 💬", "price_bdt": 75.0},
-    "go": {"name": "Gmail/Google 📧", "price_bdt": 40.0},
-    "fb": {"name": "Facebook 📘", "price_bdt": 50.0},
+    "Telegram ✈️": {"code": "tg", "price_bdt": 60.0},
+    "WhatsApp 💬": {"code": "wa", "price_bdt": 75.0},
 }
 
 WAITING_METHOD, WAITING_DETAILS, WAITING_PROOF = range(3)
@@ -71,8 +68,6 @@ def get_user_data(user_id: int) -> dict:
 
 
 def check_and_update_membership(user_id: int) -> bool:
-    """মেম্বারশিপ এর মেয়াদ (৩ দিন) আছে কিনা তা অটো চেক করে"""
-    # Admin Always Free Bypass
     if user_id == ADMIN_ID:
         return True
 
@@ -90,6 +85,18 @@ def check_and_update_membership(user_id: int) -> bool:
     return False
 
 
+def build_main_keyboard(user_id: int):
+    """মেসেজ কিবোর্ড তৈরি করবে যা ফোনের নিচে ফিক্সড থাকবে"""
+    keyboard = [
+        [KeyboardButton("✈️ Telegram - ৳60"), KeyboardButton("💬 WhatsApp - ৳75")],
+        [KeyboardButton("💰 Deposit Balance"), KeyboardButton("🔄 Refresh Menu")]
+    ]
+    if user_id == ADMIN_ID:
+        keyboard.append([KeyboardButton("⚙️ Admin Panel")])
+    
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     u_data = get_user_data(user.id)
@@ -98,10 +105,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ আপনাকে বট থেকে ব্যান করা হয়েছে।")
         return
 
-    # Admin bypass & Active user check
     is_admin = (user.id == ADMIN_ID)
     is_active = check_and_update_membership(user.id)
     balance_bdt = u_data["balance_bdt"]
+
+    main_markup = build_main_keyboard(user.id)
 
     if is_admin or is_active:
         expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **মেম্বারশিপ মেয়াদ:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
@@ -110,71 +118,61 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👋 **স্বাগতম {user.first_name}!**\n\n"
             f"💳 **ব্যালেন্স:** ৳{balance_bdt:.2f} BDT\n"
             f"{expiry_info}\n\n"
-            f"নিচের বাটন থেকে প্রয়োজনীয় অপশন নির্বাচন করুন:"
+            f"নিচের মেনু বাটন থেকে সার্ভিস নির্বাচন করুন:"
         )
-        
-        keyboard = []
-        for code, info in CUSTOM_PRICES_BDT.items():
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"{info['name']} - ৳{info['price_bdt']:.0f} BDT",
-                    callback_data=f"buy_{code}",
-                )
-            ])
-        keyboard.append([
-            InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit"),
-            InlineKeyboardButton("🔄 Refresh Menu", callback_data="btn_refresh")
-        ])
-
-        if is_admin:
-            keyboard.append([InlineKeyboardButton("⚙️ Admin Panel (/admin)", callback_data="btn_admin_info")])
-
-        await update.message.reply_text(
-            msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=main_markup)
     else:
         msg = (
             f"👋 **স্বাগতম {user.first_name}!**\n\n"
-            f"⚠️ **আপনার ৩ দিনের মেম্বারশিপ মেয়াদ শেষ বা সক্রিয় নেই।**\n"
-            f"বট ব্যবহার করতে আপনাকে ৩ দিনের মেম্বারশিপ কিনতে হবে।\n\n"
+            f"⚠️ **আপনার ৩ দিনের মেম্বারশিপ সক্রিয় নেই।**\n"
+            f"মেম্বারশিপ কিনতে বা ডিপোজিট করতে নিচের মেনু ব্যবহার করুন।\n\n"
             f"💵 **ফি:** ৳৩০ BDT\n"
-            f"💳 **আপনার ব্যালেন্স:** ৳{balance_bdt:.2f} BDT\n\n"
-            f"নিচের বাটন ব্যবহার করুন:"
+            f"💳 **আপনার ব্যালেন্স:** ৳{balance_bdt:.2f} BDT"
         )
-        keyboard = [
-            [InlineKeyboardButton("🛒 Buy 3-Days Membership (৳30)", callback_data="btn_buy_3days")],
-            [InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit")]
+        sub_keyboard = [
+            [KeyboardButton("🛒 Buy 3-Days Membership (৳30)")],
+            [KeyboardButton("💰 Deposit Balance"), KeyboardButton("🔄 Refresh Menu")]
         ]
         await update.message.reply_text(
-            msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+            msg, parse_mode="Markdown", reply_markup=ReplyKeyboardMarkup(sub_keyboard, resize_keyboard=True)
         )
 
 
-async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+# --- TEXT BUTTON HANDLER ---
 
-    data = query.data
-    user_id = query.from_user.id
+async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    text = update.message.text.strip()
     u_data = get_user_data(user_id)
 
-    if data == "btn_refresh":
+    if text == "🔄 Refresh Menu":
         await start(update, context)
+        return
 
-    elif data == "btn_admin_info":
-        await query.edit_message_text("⚙️ Admin Panel খুলতে টাইপ করুন: `/admin`", parse_mode="Markdown")
+    if text == "⚙️ Admin Panel":
+        if user_id != ADMIN_ID:
+            return
+        admin_msg = (
+            "⚙️ **Admin Control Panel**\n\n"
+            "কমান্ডসমূহ টাইপ করে ব্যবহার করুন:\n"
+            "• `/users` - ইউজারের তালিকা\n"
+            "• `/setprice CODE BDT` - দাম পরিবর্তন (যেমন: `/setprice tg 50`)\n"
+            "• `/ban USER_ID` - ইউজার ব্যান করা\n"
+            "• `/unban USER_ID` - ব্যান তোলা\n"
+            "• `/addbalance USER_ID BDT` - ব্যালেন্স দেওয়া"
+        )
+        await update.message.reply_text(admin_msg, parse_mode="Markdown")
+        return
 
-    elif data == "btn_buy_3days":
+    if text == "🛒 Buy 3-Days Membership (৳30)":
         fee_bdt = 30.0
         if check_and_update_membership(user_id) and user_id != ADMIN_ID:
-            await query.edit_message_text("আপনার মেম্বারশিপ ইতিমধ্যেই সক্রিয় আছে!")
+            await update.message.reply_text("আপনার মেম্বারশিপ ইতিমধ্যেই সক্রিয় আছে!")
             return
 
         if u_data["balance_bdt"] < fee_bdt:
-            keyboard = [[InlineKeyboardButton("💰 Deposit Balance Now", callback_data="btn_deposit")]]
-            await query.edit_message_text(
-                f"❌ পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳৩০, আপনার আছে: ৳{u_data['balance_bdt']:.2f}\n\nপ্রথমে ব্যালেন্স ডিপোজিট করুন:",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(
+                f"❌ পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳৩০, আপনার আছে: ৳{u_data['balance_bdt']:.2f}\n\nপ্রথমে Deposit Balance বাটনে চাপুন।"
             )
             return
 
@@ -182,296 +180,105 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         u_data["approved"] = True
         u_data["expiry"] = datetime.now() + timedelta(days=3)
 
-        keyboard = [[InlineKeyboardButton("🚀 Go to Services", callback_data="btn_refresh")]]
-        await query.edit_message_text(
-            f"🎉 ৩ দিনের মেম্বারশিপ চালু করা হয়েছে!\nমেয়াদ শেষ হবে: {u_data['expiry'].strftime('%Y-%m-%d %H:%M')}\nঅবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f}",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            f"🎉 ৩ দিনের মেম্বারশিপ চালু হয়েছে!\nঅবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f}",
+            reply_markup=build_main_keyboard(user_id)
         )
+        return
 
-    elif data == "btn_deposit":
-        keyboard = [
-            [
-                InlineKeyboardButton("bKash (BDT)", callback_data="dep_bkash"),
-                InlineKeyboardButton("Binance (USDT)", callback_data="dep_binance"),
-            ]
+    if text == "💰 Deposit Balance":
+        dep_keyboard = [
+            [KeyboardButton("bKash (BDT)"), KeyboardButton("Binance (USDT)")],
+            [KeyboardButton("🔙 Main Menu")]
         ]
-        await query.edit_message_text(
-            "পেমেন্ট মেথড সিলেক্ট করুন:", reply_markup=InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            "পেমেন্ট মেথড সিলেক্ট করুন:",
+            reply_markup=ReplyKeyboardMarkup(dep_keyboard, resize_keyboard=True)
         )
-
-
-# --- DEPOSIT CONVERSATION FLOW ---
-
-async def deposit_start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton("bKash (BDT)", callback_data="dep_bkash"),
-            InlineKeyboardButton("Binance (USDT)", callback_data="dep_binance"),
-        ]
-    ]
-    await update.message.reply_text(
-        "পেমেন্ট মেথড বেছে নিন:", reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-    return WAITING_METHOD
-
-
-async def deposit_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    method = query.data.split("_")[1]
-    context.user_data["dep_method"] = method
-
-    if method == "bkash":
-        msg = (
-            f"📌 **bKash Payment**\n"
-            f"নাম্বার: `{ADMIN_BKASH}`\n\n"
-            f"টাকা পাঠানোর পর মেসেজে লিখুন:\n"
-            f"`[টাকার পরিমাণ] [TrxID]`\n"
-            f"উদাহরণ: `100 TRX12345678`"
-        )
-    else:
-        msg = (
-            f"📌 **Binance USDT Payment**\n"
-            f"Binance ID: `{ADMIN_BINANCE}`\n"
-            f"রেট: $1 = ৳125 BDT\n\n"
-            f"USDT পাঠানোর পর মেসেজে লিখুন:\n"
-            f"`[USDT পরিমাণ] [Order/TxID]`\n"
-            f"উদাহরণ: `5 987654321`"
-        )
-
-    await query.edit_message_text(msg, parse_mode="Markdown")
-    return WAITING_DETAILS
-
-
-async def deposit_details_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip().split()
-    if len(text) < 2:
-        await update.message.reply_text("ভুল ফরম্যাট! আবার লিখুন। (যেমন: `100 TRX123456`)")
-        return WAITING_DETAILS
-
-    try:
-        amount = float(text[0])
-        trx_id = text[1]
-    except ValueError:
-        await update.message.reply_text("পরিমাণ সংখ্যায় লিখুন।")
-        return WAITING_DETAILS
-
-    context.user_data["dep_amount"] = amount
-    context.user_data["dep_trx"] = trx_id
-
-    await update.message.reply_text("এবার পেমেন্টের স্ক্রিনশট (Photo) পাঠান:")
-    return WAITING_PROOF
-
-
-async def deposit_proof_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    photo_file_id = update.message.photo[-1].file_id
-
-    method = context.user_data.get("dep_method")
-    amount = context.user_data.get("dep_amount")
-    trx_id = context.user_data.get("dep_trx")
-
-    dep_id = f"{user.id}_{int(datetime.now().timestamp())}"
-    pending_deposits[dep_id] = {
-        "user_id": user.id,
-        "amount": amount,
-        "method": method,
-        "trx_id": trx_id,
-    }
-
-    curr_str = f"${amount} USDT (৳{amount*USD_TO_BDT:.2f})" if method == "binance" else f"৳{amount} BDT"
-
-    keyboard = [
-        [
-            InlineKeyboardButton("Approve ✅", callback_data=f"dapp_{dep_id}"),
-            InlineKeyboardButton("Reject ❌", callback_data=f"drej_{dep_id}"),
-        ]
-    ]
-
-    await context.bot.send_photo(
-        chat_id=ADMIN_ID,
-        photo=photo_file_id,
-        caption=(
-            f"📥 **নতুন ডিপোজিট রিকোয়েস্ট!**\n\n"
-            f"User: {user.first_name} (`{user.id}`)\n"
-            f"Method: {method.upper()}\n"
-            f"Amount: {curr_str}\n"
-            f"Trx/Order ID: `{trx_id}`"
-        ),
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-    )
-
-    await update.message.reply_text("আপনার স্ক্রিনশট পাঠানো হয়েছে। এডমিন চেক করে ব্যালেন্স যুক্ত করে দেবে।")
-    return ConversationHandler.END
-
-
-async def deposit_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("বাতিল করা হয়েছে।")
-    return ConversationHandler.END
-
-
-async def admin_deposit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    if query.from_user.id != ADMIN_ID:
         return
 
-    action, dep_id = query.data.split("_", 1)
-    if dep_id not in pending_deposits:
-        await query.edit_message_caption(caption="এই রিকোয়েস্টটি আর বিদ্যমান নেই।")
-        return
+    # সার্ভিস কেনা চেক (Telegram / WhatsApp)
+    service_code = None
+    service_name = ""
+    price_bdt = 0.0
 
-    dep_info = pending_deposits[dep_id]
-    user_id = dep_info["user_id"]
-    method = dep_info["method"]
-    amount = dep_info["amount"]
+    if "Telegram" in text:
+        service_code = "tg"
+        service_name = "Telegram ✈️"
+        price_bdt = CUSTOM_PRICES_BDT["Telegram ✈️"]["price_bdt"]
+    elif "WhatsApp" in text:
+        service_code = "wa"
+        service_name = "WhatsApp 💬"
+        price_bdt = CUSTOM_PRICES_BDT["WhatsApp 💬"]["price_bdt"]
 
-    added_bdt = amount * USD_TO_BDT if method == "binance" else amount
-    u_data = get_user_data(user_id)
+    if service_code:
+        if not check_and_update_membership(user_id):
+            await update.message.reply_text("আপনার মেম্বারশিপ শেষ হয়ে গেছে! প্রথমে মেম্বারশিপ কিনুন।")
+            return
 
-    if action == "dapp":
-        u_data["balance_bdt"] += added_bdt
-        del pending_deposits[dep_id]
+        if user_id != ADMIN_ID and u_data["balance_bdt"] < price_bdt:
+            await update.message.reply_text(
+                f"❌ পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳{price_bdt:.2f} BDT\nবর্তমান ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT"
+            )
+            return
 
-        await query.edit_message_caption(
-            caption=f"✅ ডিপোজিট অনুমোদিত! User `{user_id}`-এর ব্যালেন্সে ৳{added_bdt:.2f} BDT যোগ করা হয়েছে।",
-            parse_mode="Markdown",
-        )
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"🎉 আপনার ৳{added_bdt:.2f} BDT ডিপোজিট সফল হয়েছে!\nবর্তমান ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT",
-        )
-    elif action == "drej":
-        del pending_deposits[dep_id]
-        await query.edit_message_caption(caption=f"❌ User `{user_id}`-এর ডিপোজিট বাতিল করা হয়েছে।")
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="আপনার ডিপোজিট রিকোয়েস্টটি বাতিল করা হয়েছে।",
-        )
+        url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country=ru"
+        try:
+            res = requests.get(url).json()
+            if "tel" in res and "idNum" in res:
+                if user_id != ADMIN_ID:
+                    u_data["balance_bdt"] -= price_bdt
 
+                phone_num = res["tel"]
+                id_num = res["idNum"]
 
-# --- ADMIN PANEL & COMMANDS ---
+                await update.message.reply_text(
+                    f"✅ **নম্বর নেওয়া সফল হয়েছে!**\n\n"
+                    f"সার্ভিস: {service_name}\n"
+                    f"কাটা হয়েছে: ৳{price_bdt:.2f} BDT\n"
+                    f"অবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT\n\n"
+                    f"📱 **নম্বর:** `{phone_num}`\n"
+                    f"🆔 **ID Num:** `{id_num}`\n\n"
+                    f"OTP চেক করতে টাইপ করুন: `/check_{id_num}`",
+                    parse_mode="Markdown"
+                )
 
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-
-    msg = (
-        "⚙️ **Admin Management Control**\n\n"
-        "নিচের কমান্ডসমূহ ব্যবহার করতে পারেন:\n"
-        "• `/users` - ইউজারের তালিকা দেখা\n"
-        "• `/setprice CODE BDT` - দাম পরিবর্তন (যেমন: `/setprice tg 50`)\n"
-        "• `/ban USER_ID` - ইউজার ব্যান করা\n"
-        "• `/unban USER_ID` - ব্যান বাতিল করা\n"
-        "• `/deluser USER_ID` - ইউজার রিমুভ করা\n"
-        "• `/addbalance USER_ID BDT` - ম্যানুয়ালি ব্যালেন্স দেওয়া"
-    )
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-async def set_price_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or len(context.args) < 2:
-        await update.message.reply_text("ফরম্যাট: `/setprice CODE BDT` (যেমন: `/setprice tg 50`)", parse_mode="Markdown")
-        return
-
-    code = context.args[0].lower()
-    try:
-        new_price = float(context.args[1])
-        if code in CUSTOM_PRICES_BDT:
-            CUSTOM_PRICES_BDT[code]["price_bdt"] = new_price
-            await update.message.reply_text(f"✅ {CUSTOM_PRICES_BDT[code]['name']}-এর দাম পরিবর্তন করে ৳{new_price:.2f} করা হয়েছে।")
-        else:
-            await update.message.reply_text("ইনভ্যালিড কোড! (tg, wa, go, fb)")
-    except ValueError:
-        await update.message.reply_text("সঠিক দাম সংখ্যায় লিখুন।")
+                asyncio.create_task(
+                    poll_otp_and_forward(context, id_num, phone_num, service_name, user_id)
+                )
+            else:
+                await update.message.reply_text(f"নম্বর পাওয়া যায়নি: {res.get('error', 'অজানা সমস্যা')}")
+        except Exception as e:
+            await update.message.reply_text(f"API এরর: {str(e)}")
 
 
-async def list_users_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
+# --- MANUAL OTP CHECK ---
 
-    if not users_db:
-        await update.message.reply_text("কোনো ইউজার ডাটা নেই।")
-        return
-
-    msg = "📋 **ইউজার তালিকা:**\n\n"
-    for uid, uinfo in users_db.items():
-        status = "BANNED 🚫" if uinfo.get("banned") else ("ACTIVE 🟢" if check_and_update_membership(uid) else "EXPIRED 🔴")
-        exp_str = uinfo["expiry"].strftime("%d-%m %H:%M") if uinfo.get("expiry") else "None"
-        msg += f"• ID: `{uid}` | BDT: ৳{uinfo['balance_bdt']:.1f} | {status} | Exp: {exp_str}\n"
-
-    await update.message.reply_text(msg, parse_mode="Markdown")
-
-
-async def ban_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or not context.args:
-        return
-    try:
-        target_id = int(context.args[0])
-        u_data = get_user_data(target_id)
-        u_data["banned"] = True
-        u_data["approved"] = False
-        await update.message.reply_text(f"✅ ইউজার `{target_id}` ব্যান করা হয়েছে।", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("সঠিক User ID দিন।")
+async def check_otp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    if text.startswith("/check_"):
+        id_num = text.replace("/check_", "").strip()
+        url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
+        try:
+            res = requests.get(url).json()
+            if "smsCode" in res and res["smsCode"]:
+                await update.message.reply_text(f"🔑 **আপনার OTP কোড:** `{res['smsCode']}`", parse_mode="Markdown")
+            else:
+                await update.message.reply_text("এখনো কোনো SMS আসেনি। আবার চেষ্টা করুন।")
+        except Exception as e:
+            await update.message.reply_text(f"এরর: {str(e)}")
 
 
-async def unban_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or not context.args:
-        return
-    try:
-        target_id = int(context.args[0])
-        u_data = get_user_data(target_id)
-        u_data["banned"] = False
-        await update.message.reply_text(f"✅ ইউজার `{target_id}`-এর ব্যান তোলা হয়েছে।", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("সঠিক User ID দিন।")
-
-
-async def del_user_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or not context.args:
-        return
-    try:
-        target_id = int(context.args[0])
-        if target_id in users_db:
-            del users_db[target_id]
-            await update.message.reply_text(f"🗑️ ইউজার `{target_id}`-এর ডাটা ডিলিট করা হয়েছে।", parse_mode="Markdown")
-        else:
-            await update.message.reply_text("ইউজার পাওয়া যায়নি।")
-    except ValueError:
-        await update.message.reply_text("সঠিক User ID দিন।")
-
-
-async def add_balance_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or len(context.args) < 2:
-        return
-    try:
-        target_id = int(context.args[0])
-        amount = float(context.args[1])
-        u_data = get_user_data(target_id)
-        u_data["balance_bdt"] += amount
-        await update.message.reply_text(f"✅ ইউজার `{target_id}`-এর ব্যালেন্সে ৳{amount:.2f} BDT যুক্ত করা হয়েছে।", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("ID ও অ্যামাউন্ট সংখ্যায় লিখুন।")
-
-
-# --- AUTO OTP CHECK & FORWARDING TO GROUP ---
+# --- BACKGROUND OTP POLLING ---
 
 async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, phone_num: str, service_name: str, user_id: int):
-    """ব্যাকগ্রাউন্ডে OTP চেক করবে এবং এসএমএস আসলে সাথে সাথে গ্রুপে পাঠাবে"""
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
-    
     for _ in range(100):
         await asyncio.sleep(6)
         try:
             res = requests.get(url).json()
             if "smsCode" in res and res["smsCode"]:
                 otp_code = res["smsCode"]
-                
-                # ১. ইউজারকে ব্যক্তিগত মেসেজে জানানো
                 try:
                     await context.bot.send_message(
                         chat_id=user_id,
@@ -481,7 +288,6 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                 except Exception:
                     pass
 
-                # ২. নির্দিষ্ট টেলিগ্রাম গ্রুপে OTP অটো-ফরওয়ার্ড করা
                 if OTP_GROUP_ID:
                     try:
                         forward_msg = (
@@ -497,117 +303,49 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                             parse_mode="Markdown"
                         )
                     except Exception as err:
-                        logging.error(f"Failed to forward OTP to Group: {err}")
-                
+                        logging.error(f"Failed to forward OTP: {err}")
                 break
         except Exception as e:
-            logging.error(f"Error checking OTP background task: {e}")
+            logging.error(f"Error checking OTP: {e}")
 
 
-# --- VAK-SMS SERVICES BUYING ---
+# --- ADMIN COMMANDS ---
 
-async def buy_service_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-    if not check_and_update_membership(user_id):
-        keyboard = [[InlineKeyboardButton("🛒 Buy Membership (৳30)", callback_data="btn_buy_3days")]]
-        await query.edit_message_text(
-            "আপনার ৩ দিনের মেম্বারশিপ শেষ হয়ে গেছে! আবার ব্যবহার করতে মেম্বারশিপ কিনুন:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+async def set_price_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID or len(context.args) < 2:
+        await update.message.reply_text("ফরম্যাট: `/setprice CODE BDT` (যেমন: `/setprice tg 50`)", parse_mode="Markdown")
         return
-
-    service_code = query.data.split("_")[1]
-    service_info = CUSTOM_PRICES_BDT.get(service_code)
-    
-    if not service_info:
-        await query.edit_message_text("ইনভ্যালিড সার্ভিস।")
-        return
-
-    custom_price_bdt = service_info["price_bdt"]
-    u_data = get_user_data(user_id)
-
-    # Admin Free Purchase or Balance Check
-    if user_id != ADMIN_ID and u_data["balance_bdt"] < custom_price_bdt:
-        keyboard = [[InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit")]]
-        await query.edit_message_text(
-            f"পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳{custom_price_bdt:.2f} BDT\nবর্তমান ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-        return
-
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country=ru"
+    code = context.args[0].lower()
     try:
-        res = requests.get(url).json()
-        if "tel" in res and "idNum" in res:
-            if user_id != ADMIN_ID:
-                u_data["balance_bdt"] -= custom_price_bdt
-
-            phone_num = res["tel"]
-            id_num = res["idNum"]
-
-            keyboard = [
-                [InlineKeyboardButton("📩 Check OTP / SMS", callback_data=f"getotp_{id_num}")],
-                [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="btn_refresh")]
-            ]
-
-            await query.edit_message_text(
-                f"✅ **নম্বর নেওয়া সফল হয়েছে!**\n\n"
-                f"সার্ভিস: {service_info['name']}\n"
-                f"কাটা হয়েছে: ৳{custom_price_bdt:.2f} BDT\n"
-                f"অবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT\n\n"
-                f"📱 **নম্বর:** `{phone_num}`\n"
-                f"🆔 **ID Num:** `{id_num}`",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-
-            asyncio.create_task(
-                poll_otp_and_forward(context, id_num, phone_num, service_info['name'], user_id)
-            )
-
+        new_price = float(context.args[1])
+        if code == "tg":
+            CUSTOM_PRICES_BDT["Telegram ✈️"]["price_bdt"] = new_price
+            await update.message.reply_text(f"✅ Telegram-এর দাম ৳{new_price:.2f} করা হয়েছে।")
+        elif code == "wa":
+            CUSTOM_PRICES_BDT["WhatsApp 💬"]["price_bdt"] = new_price
+            await update.message.reply_text(f"✅ WhatsApp-এর দাম ৳{new_price:.2f} করা হয়েছে।")
         else:
-            await query.edit_message_text(f"নম্বর পাওয়া যায়নি: {res.get('error', 'অজানা সমস্যা')}")
-    except Exception as e:
-        await query.edit_message_text(f"API এরর: {str(e)}")
+            await update.message.reply_text("ইনভ্যালিড কোড! (tg অথবা wa)")
+    except ValueError:
+        await update.message.reply_text("সঠিক দাম লিখুন।")
 
 
-async def check_otp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    id_num = query.data.split("_")[1]
-    url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
-
-    try:
-        res = requests.get(url).json()
-        if "smsCode" in res and res["smsCode"]:
-            keyboard = [[InlineKeyboardButton("🔙 Back to Main Menu", callback_data="btn_refresh")]]
-            await query.edit_message_text(
-                f"🔑 **আপনার OTP কোড:** `{res['smsCode']}`",
-                parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        else:
-            keyboard = [
-                [InlineKeyboardButton("🔄 Check OTP Again", callback_data=f"getotp_{id_num}")],
-                [InlineKeyboardButton("🔙 Back to Main Menu", callback_data="btn_refresh")]
-            ]
-            await query.edit_message_text(
-                "এখনো কোনো SMS আসেনি। নাম্বারে কোড পাঠিয়ে কিছুক্ষণ পর আবার চেক করুন।",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-    except Exception as e:
-        await query.edit_message_text(f"এরর: {str(e)}")
+async def list_users_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != ADMIN_ID:
+        return
+    if not users_db:
+        await update.message.reply_text("কোনো ইউজার ডাটা নেই।")
+        return
+    msg = "📋 **ইউজার তালিকা:**\n\n"
+    for uid, uinfo in users_db.items():
+        status = "BANNED 🚫" if uinfo.get("banned") else ("ACTIVE 🟢" if check_and_update_membership(uid) else "EXPIRED 🔴")
+        msg += f"• ID: `{uid}` | BDT: ৳{uinfo['balance_bdt']:.1f} | {status}\n"
+    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 def main():
-    # 1. Background-এ Flask Server চালানো
     threading.Thread(target=run_flask, daemon=True).start()
 
-    # 2. Asyncio Loop হ্যান্ডেল করা (Python 3.12+ / Render Crash সমাধান)
     try:
         loop = asyncio.get_event_loop()
     except RuntimeError:
@@ -616,30 +354,11 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
 
-    deposit_handler = ConversationHandler(
-        entry_points=[CommandHandler("deposit", deposit_start_cmd)],
-        states={
-            WAITING_METHOD: [CallbackQueryHandler(deposit_method_selected, pattern="^dep_")],
-            WAITING_DETAILS: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_details_received)],
-            WAITING_PROOF: [MessageHandler(filters.PHOTO, deposit_proof_received)],
-        },
-        fallbacks=[CommandHandler("cancel", deposit_cancel)],
-    )
-
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("admin", admin_panel))
     app.add_handler(CommandHandler("users", list_users_cmd))
     app.add_handler(CommandHandler("setprice", set_price_cmd))
-    app.add_handler(CommandHandler("ban", ban_user_cmd))
-    app.add_handler(CommandHandler("unban", unban_user_cmd))
-    app.add_handler(CommandHandler("deluser", del_user_cmd))
-    app.add_handler(CommandHandler("addbalance", add_balance_cmd))
-    app.add_handler(deposit_handler)
-
-    app.add_handler(CallbackQueryHandler(admin_deposit_callback, pattern="^(dapp|drej)_"))
-    app.add_handler(CallbackQueryHandler(button_click_handler, pattern="^btn_"))
-    app.add_handler(CallbackQueryHandler(buy_service_callback, pattern="^buy_"))
-    app.add_handler(CallbackQueryHandler(check_otp_callback, pattern="^getotp_"))
+    app.add_handler(MessageHandler(filters.Regex("^/check_"), check_otp_cmd))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
 
     print("Bot is running...")
     app.run_polling(close_loop=False)
