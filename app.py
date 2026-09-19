@@ -28,17 +28,17 @@ VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY")
 ADMIN_BKASH = os.getenv("ADMIN_BKASH", "Not Set")
 ADMIN_BINANCE = os.getenv("ADMIN_BINANCE", "Not Set")
 
-# যে গ্রুপে OTP ফরওয়ার্ড হবে তার Chat ID (উদাহরণ: -1001234567890)
+# যে গ্রুপে OTP ফরওয়ার্ড হবে তার Chat ID
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID") 
 
 USD_TO_BDT = 125.0
 
-# Render Free Tier Keep-Alive Server
+# Render Free Tier Keep-Alive & UptimeRobot Server
 flask_app = Flask("")
 
 @flask_app.route("/")
 def home():
-    return "Bot is running on Render!"
+    return "Bot is Alive & Running on Render!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -106,7 +106,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"নিচের বাটন থেকে প্রয়োজনীয় অপশন নির্বাচন করুন:"
         )
         keyboard = []
-        # সার্ভিস বাটনসমূহ
         for code, info in CUSTOM_PRICES_BDT.items():
             keyboard.append([
                 InlineKeyboardButton(
@@ -114,7 +113,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     callback_data=f"buy_{code}",
                 )
             ])
-        # অতিরিক্ত সার্ভিস বাটন
         keyboard.append([
             InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit"),
             InlineKeyboardButton("🔄 Refresh Menu", callback_data="btn_refresh")
@@ -452,7 +450,6 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
     """ব্যাকগ্রাউন্ডে OTP চেক করবে এবং এসএমএস আসলে সাথে সাথে গ্রুপে পাঠাবে"""
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
     
-    # সর্বোচ্চ ১০ মিনিট ট্রাই করবে (প্রতি ৬ সেকেন্ড পরপর)
     for _ in range(100):
         await asyncio.sleep(6)
         try:
@@ -470,7 +467,7 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                 except Exception:
                     pass
 
-                # ২. নির্দিষ্ট টেলিগ্রাম গ্রুপে OTP অটো-ফরওয়ার্ড করা
+                # ২. নির্দিষ্ট টেলিগ্রাম গ্রুপে OTP অটো-ফরওয়ার্ড করা
                 if OTP_GROUP_ID:
                     try:
                         forward_msg = (
@@ -488,7 +485,6 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                     except Exception as err:
                         logging.error(f"Failed to forward OTP to Group: {err}")
                 
-                # কোড পাওয়া গেলে লুপ শেষ হবে
                 break
         except Exception as e:
             logging.error(f"Error checking OTP background task: {e}")
@@ -551,7 +547,6 @@ async def buy_service_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
-            # ব্যাকগ্রাউন্ডে অটোমেটিক OTP ট্র্যাকিং ও গ্রুপে ফরওয়ার্ড করার টাস্ক স্টার্ট
             asyncio.create_task(
                 poll_otp_and_forward(context, id_num, phone_num, service_info['name'], user_id)
             )
@@ -592,7 +587,15 @@ async def check_otp_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 def main():
+    # 1. Background-এ Flask Server চালানো
     threading.Thread(target=run_flask, daemon=True).start()
+
+    # 2. Asyncio Loop হ্যান্ডেল করা (Python 3.12+ / Render Crash সমাধান)
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     app = Application.builder().token(BOT_TOKEN).build()
 
@@ -622,7 +625,7 @@ def main():
     app.add_handler(CallbackQueryHandler(check_otp_callback, pattern="^getotp_"))
 
     print("Bot is running...")
-    app.run_polling()
+    app.run_polling(close_loop=False)
 
 
 if __name__ == "__main__":
