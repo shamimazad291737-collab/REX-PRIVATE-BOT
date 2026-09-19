@@ -3,7 +3,7 @@ import os
 import threading
 import asyncio
 from datetime import datetime, timedelta
-from flask import Flask
+from flask import Flask, request, jsonify
 from telegram import ReplyKeyboardMarkup, KeyboardButton, Update
 from telegram.ext import (
     Application,
@@ -19,31 +19,41 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 
-# Environment Variables
+# Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY")
+# Aponar provide kora API Key default vabe set kora holo
+VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
 ADMIN_BKASH = os.getenv("ADMIN_BKASH", "Not Set")
 ADMIN_BINANCE = os.getenv("ADMIN_BINANCE", "Not Set")
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID") 
 
-USD_TO_BDT = 125.0
-
-# Render Keep-Alive Server
+# Flask Server & Webhook Handler
 flask_app = Flask("")
 
 @flask_app.route("/")
 def home():
     return "Bot is Alive & Running!", 200
 
+# VAK-SMS Webhook Endpoint
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    data = request.json
+    if data:
+        id_num = data.get("idNum")
+        tel = data.get("tel")
+        sms_code = data.get("smsCode")
+        logging.info(f"Webhook Received: ID={id_num}, Phone={tel}, Code={sms_code}")
+    return jsonify({"status": "success"}), 200
+
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
-# Databases
+# Databases & Global States
 users_db = {}
-# Active country set by admin (Default: ru = Russia, us = USA, id = Indonesia)
-active_country = "ru" 
+active_country = "ru"  # Default active country
+admin_waiting_country_search = {}
 
 CUSTOM_PRICES_BDT = {
     "Telegram ✈️": {"code": "tg", "price_bdt": 60.0},
@@ -135,20 +145,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def get_country_capacity(service_code: str, country_code: str):
-    """VAK-SMS theke specific country-r stock/capacity check korbe"""
+    """VAK-SMS API theke stock capacity anar function"""
     url = f"https://vak-sms.com/api/getMiniNum/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={country_code}"
     try:
         res = requests.get(url).json()
-        if "count" in res:
-            return res["count"]
-        elif service_code in res:
-            return res[service_code]
+        if isinstance(res, dict):
+            if "count" in res:
+                return res["count"]
+            elif service_code in res:
+                return res[service_code]
         return 0
     except Exception:
         return 0
 
 
-# --- BUTTON NAVIGATION & ACTIONS ---
+# --- BUTTON HANDLERS ---
 
 async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global active_country
@@ -156,11 +167,46 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text.strip()
     u_data = get_user_data(user_id)
 
+    # Main Menu Navigation
     if text in ["🔄 Refresh Menu", "🔙 Main Menu"]:
+        admin_waiting_country_search[user_id] = False
         await start(update, context)
         return
 
-    # Buy Number Menu & Stock Capacity Show
+    # Admin Country Code Button Selection Logic (Kono Command Type Chara)
+    if text.startswith("Flag ") or text.startswith("Select Country:"):
+        if user_id == ADMIN_ID:
+            code = text.split(":")[-1].strip().lower()
+            active_country = code
+            admin_waiting_country_search[user_id] = False
+            await update.message.reply_text(
+                f"✅ **Active Country Set Done!**\nBortoman Active Country: `{active_country.upper()}`",
+                parse_mode="Markdown",
+                reply_markup=build_main_keyboard(user_id)
+            )
+            return
+
+    # Admin Search Text Input Handling
+    if admin_waiting_country_search.get(user_id, False) and user_id == ADMIN_ID:
+        search_code = text.lower().strip()
+        tg_cnt = get_country_capacity("tg", search_code)
+        wa_cnt = get_country_capacity("wa", search_code)
+
+        confirm_keyboard = [
+            [KeyboardButton(f"Select Country: {search_code}")],
+            [KeyboardButton("🌐 Set Country Code"), KeyboardButton("🔙 Main Menu")]
+        ]
+        await update.message.reply_text(
+            f"🔍 **Search Result for `{search_code.upper()}`:**\n\n"
+            f"✈️ Telegram Capacity: **{tg_cnt}**\n"
+            f"💬 WhatsApp Capacity: **{wa_cnt}**\n\n"
+            f"Aapni ki ei country-ti active korte chan?",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(confirm_keyboard, resize_keyboard=True)
+        )
+        return
+
+    # Buy Number Option
     if text == "🛒 Buy Number":
         tg_cap = get_country_capacity("tg", active_country)
         wa_cap = get_country_capacity("wa", active_country)
@@ -171,7 +217,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         ]
         await update.message.reply_text(
             f"📱 **Selected Country: `{active_country.upper()}`**\n"
-            f"Nicher available stock dekhe service select korun:",
+            f"Available stock dekhe service select korun:",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(buy_keyboard, resize_keyboard=True)
         )
@@ -181,7 +227,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     if text == "📩 Check Last OTP":
         id_num = u_data.get("last_id_num")
         if not id_num:
-            await update.message.reply_text("❌ Aapnar kono active number order nei.")
+            await update.message.reply_text("❌ Aapnar kono active order nei.")
             return
 
         url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
@@ -190,12 +236,12 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             if "smsCode" in res and res["smsCode"]:
                 await update.message.reply_text(f"🔑 **Aapnar OTP Code:** `{res['smsCode']}`", parse_mode="Markdown")
             else:
-                await update.message.reply_text("⏳ Ekhono kono SMS aseni. Ektu por Check OTP-te chapun.")
+                await update.message.reply_text("⏳ Ekhono SMS aseni. Ektu por Check OTP-te chapun.")
         except Exception as e:
             await update.message.reply_text(f"Error: {str(e)}")
         return
 
-    # Admin Panel Actions
+    # Admin Panel
     if text == "⚙️ Admin Panel":
         if user_id != ADMIN_ID:
             return
@@ -205,18 +251,31 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            f"⚙️ **Admin Control Panel**\n\nCurrent Active Country: `{active_country}`", 
+            f"⚙️ **Admin Control Panel**\n\nCurrent Active Country: `{active_country.upper()}`", 
             parse_mode="Markdown", 
             reply_markup=ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
         )
         return
 
+    # Country Select Menu (Quick Buttons + Search Option)
     if text == "🌐 Set Country Code":
         if user_id != ADMIN_ID:
             return
+        
+        admin_waiting_country_search[user_id] = True
+
+        country_buttons = [
+            [KeyboardButton("Select Country: ru"), KeyboardButton("Select Country: us")],
+            [KeyboardButton("Select Country: id"), KeyboardButton("Select Country: hk")],
+            [KeyboardButton("Select Country: in"), KeyboardButton("Select Country: ph")],
+            [KeyboardButton("🔙 Main Menu")]
+        ]
         await update.message.reply_text(
-            "Country code set korar jonno type korun:\n`/setcountry CODE`\n\nExample:\n`/setcountry ru` (Russia)\n`/setcountry us` (USA)\n`/setcountry id` (Indonesia)",
-            parse_mode="Markdown"
+            "🌍 **Country Selection Panel**\n\n"
+            "1. Direct country set korte nicher button-e chapun.\n"
+            "2. Nije kono country check korte chasle code type korun (e.g. `hk`, `vn`, `br`):",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(country_buttons, resize_keyboard=True)
         )
         return
 
@@ -266,7 +325,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return
 
-    # Number Buying Logic
+    # Purchase Logic
     service_code = None
     service_name = ""
     price_bdt = 0.0
@@ -291,11 +350,10 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
 
-        # Fetch number based on Admin's selected country
         url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={active_country}"
         try:
             res = requests.get(url).json()
-            if "tel" in res and "idNum" in res:
+            if isinstance(res, dict) and "tel" in res and "idNum" in res:
                 if user_id != ADMIN_ID:
                     u_data["balance_bdt"] -= price_bdt
 
@@ -322,29 +380,15 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
                 )
 
                 asyncio.create_task(
-                    poll_otp_and_forward(context, id_num, phone_num, service_name, user_id)
+                    poll_otp_and_forward(context, id_num, str(phone_num), service_name, user_id)
                 )
             else:
-                err_msg = res.get('error', 'noNumber')
+                err_msg = res.get('error', 'noNumber') if isinstance(res, dict) else 'noNumber'
                 await update.message.reply_text(
-                    f"❌ Country `{active_country.upper()}`-e ekhon {service_name} number stock nei ({err_msg}). Admin-ke country change korte bolun."
+                    f"❌ Country `{active_country.upper()}`-e {service_name} number stock nei ({err_msg}). Admin-ke onno country set korte bolun."
                 )
         except Exception as e:
             await update.message.reply_text(f"API Error: {str(e)}")
-
-
-# --- ADMIN COUNTRY COMMAND ---
-
-async def set_country_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global active_country
-    if update.effective_user.id != ADMIN_ID:
-        return
-    if not context.args:
-        await update.message.reply_text("Format: `/setcountry CODE` (Example: `/setcountry ru`)", parse_mode="Markdown")
-        return
-    
-    active_country = context.args[0].lower()
-    await update.message.reply_text(f"✅ Bot Country successfuly changed to: `{active_country.upper()}`", parse_mode="Markdown")
 
 
 # --- BACKGROUND OTP POLLING ---
@@ -355,7 +399,7 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
         await asyncio.sleep(6)
         try:
             res = requests.get(url).json()
-            if "smsCode" in res and res["smsCode"]:
+            if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
                 otp_code = res["smsCode"]
                 try:
                     await context.bot.send_message(
@@ -399,7 +443,6 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("setcountry", set_country_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
 
     print("Bot is running...")
