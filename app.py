@@ -72,6 +72,10 @@ def get_user_data(user_id: int) -> dict:
 
 def check_and_update_membership(user_id: int) -> bool:
     """মেম্বারশিপ এর মেয়াদ (৩ দিন) আছে কিনা তা অটো চেক করে"""
+    # Admin Always Free Bypass
+    if user_id == ADMIN_ID:
+        return True
+
     user = get_user_data(user_id)
     if user.get("banned", False):
         return False
@@ -90,21 +94,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     u_data = get_user_data(user.id)
 
-    if u_data.get("banned", False):
+    if u_data.get("banned", False) and user.id != ADMIN_ID:
         await update.message.reply_text("❌ আপনাকে বট থেকে ব্যান করা হয়েছে।")
         return
 
+    # Admin bypass & Active user check
+    is_admin = (user.id == ADMIN_ID)
     is_active = check_and_update_membership(user.id)
     balance_bdt = u_data["balance_bdt"]
 
-    if is_active:
-        expiry_date = u_data["expiry"].strftime("%Y-%m-%d %H:%M")
+    if is_admin or is_active:
+        expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **মেম্বারশিপ মেয়াদ:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
+        
         msg = (
             f"👋 **স্বাগতম {user.first_name}!**\n\n"
             f"💳 **ব্যালেন্স:** ৳{balance_bdt:.2f} BDT\n"
-            f"⏳ **মেম্বারশিপ মেয়াদ:** {expiry_date}\n\n"
+            f"{expiry_info}\n\n"
             f"নিচের বাটন থেকে প্রয়োজনীয় অপশন নির্বাচন করুন:"
         )
+        
         keyboard = []
         for code, info in CUSTOM_PRICES_BDT.items():
             keyboard.append([
@@ -117,6 +125,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit"),
             InlineKeyboardButton("🔄 Refresh Menu", callback_data="btn_refresh")
         ])
+
+        if is_admin:
+            keyboard.append([InlineKeyboardButton("⚙️ Admin Panel (/admin)", callback_data="btn_admin_info")])
 
         await update.message.reply_text(
             msg, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
@@ -150,9 +161,12 @@ async def button_click_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     if data == "btn_refresh":
         await start(update, context)
 
+    elif data == "btn_admin_info":
+        await query.edit_message_text("⚙️ Admin Panel খুলতে টাইপ করুন: `/admin`", parse_mode="Markdown")
+
     elif data == "btn_buy_3days":
         fee_bdt = 30.0
-        if check_and_update_membership(user_id):
+        if check_and_update_membership(user_id) and user_id != ADMIN_ID:
             await query.edit_message_text("আপনার মেম্বারশিপ ইতিমধ্যেই সক্রিয় আছে!")
             return
 
@@ -515,7 +529,8 @@ async def buy_service_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     custom_price_bdt = service_info["price_bdt"]
     u_data = get_user_data(user_id)
 
-    if u_data["balance_bdt"] < custom_price_bdt:
+    # Admin Free Purchase or Balance Check
+    if user_id != ADMIN_ID and u_data["balance_bdt"] < custom_price_bdt:
         keyboard = [[InlineKeyboardButton("💰 Deposit Balance", callback_data="btn_deposit")]]
         await query.edit_message_text(
             f"পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳{custom_price_bdt:.2f} BDT\nবর্তমান ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT",
@@ -527,7 +542,9 @@ async def buy_service_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         res = requests.get(url).json()
         if "tel" in res and "idNum" in res:
-            u_data["balance_bdt"] -= custom_price_bdt
+            if user_id != ADMIN_ID:
+                u_data["balance_bdt"] -= custom_price_bdt
+
             phone_num = res["tel"]
             id_num = res["idNum"]
 
