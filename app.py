@@ -9,7 +9,6 @@ from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
-    ConversationHandler,
     MessageHandler,
     filters,
 )
@@ -26,13 +25,11 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY")
 ADMIN_BKASH = os.getenv("ADMIN_BKASH", "Not Set")
 ADMIN_BINANCE = os.getenv("ADMIN_BINANCE", "Not Set")
-
-# যে গ্রুপে OTP ফরওয়ার্ড হবে
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID") 
 
 USD_TO_BDT = 125.0
 
-# Render Keep-Alive
+# Render Keep-Alive Server
 flask_app = Flask("")
 
 @flask_app.route("/")
@@ -45,15 +42,13 @@ def run_flask():
 
 # Databases
 users_db = {}
-pending_deposits = {}
+# Active country set by admin (Default: ru = Russia, us = USA, id = Indonesia)
+active_country = "ru" 
 
-# Custom Service Prices in BDT (শুধু Telegram ও WhatsApp)
 CUSTOM_PRICES_BDT = {
     "Telegram ✈️": {"code": "tg", "price_bdt": 60.0},
     "WhatsApp 💬": {"code": "wa", "price_bdt": 75.0},
 }
-
-WAITING_METHOD, WAITING_DETAILS, WAITING_PROOF = range(3)
 
 
 def get_user_data(user_id: int) -> dict:
@@ -63,6 +58,7 @@ def get_user_data(user_id: int) -> dict:
             "expiry": None,
             "approved": False,
             "banned": False,
+            "last_id_num": None,
         }
     return users_db[user_id]
 
@@ -86,9 +82,8 @@ def check_and_update_membership(user_id: int) -> bool:
 
 
 def build_main_keyboard(user_id: int):
-    """মেসেজ কিবোর্ড তৈরি করবে যা ফোনের নিচে ফিক্সড থাকবে"""
     keyboard = [
-        [KeyboardButton("✈️ Telegram - ৳60"), KeyboardButton("💬 WhatsApp - ৳75")],
+        [KeyboardButton("🛒 Buy Number")],
         [KeyboardButton("💰 Deposit Balance"), KeyboardButton("🔄 Refresh Menu")]
     ]
     if user_id == ADMIN_ID:
@@ -102,7 +97,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_user_data(user.id)
 
     if u_data.get("banned", False) and user.id != ADMIN_ID:
-        await update.message.reply_text("❌ আপনাকে বট থেকে ব্যান করা হয়েছে।")
+        await update.message.reply_text("❌ Aapnake bot theke ban kora hoyeche.")
         return
 
     is_admin = (user.id == ADMIN_ID)
@@ -112,22 +107,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     main_markup = build_main_keyboard(user.id)
 
     if is_admin or is_active:
-        expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **মেম্বারশিপ মেয়াদ:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
+        expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **Membership Expiry:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
         
         msg = (
-            f"👋 **স্বাগতম {user.first_name}!**\n\n"
-            f"💳 **ব্যালেন্স:** ৳{balance_bdt:.2f} BDT\n"
-            f"{expiry_info}\n\n"
-            f"নিচের মেনু বাটন থেকে সার্ভিস নির্বাচন করুন:"
+            f"👋 **Swagotom {user.first_name}!**\n\n"
+            f"💳 **Balance:** ৳{balance_bdt:.2f} BDT\n"
+            f"{expiry_info}\n"
+            f"🌍 **Active Country:** `{active_country.upper()}`\n\n"
+            f"Nicher menu button theke option select korun:"
         )
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=main_markup)
     else:
         msg = (
-            f"👋 **স্বাগতম {user.first_name}!**\n\n"
-            f"⚠️ **আপনার ৩ দিনের মেম্বারশিপ সক্রিয় নেই।**\n"
-            f"মেম্বারশিপ কিনতে বা ডিপোজিট করতে নিচের মেনু ব্যবহার করুন।\n\n"
-            f"💵 **ফি:** ৳৩০ BDT\n"
-            f"💳 **আপনার ব্যালেন্স:** ৳{balance_bdt:.2f} BDT"
+            f"👋 **Swagotom {user.first_name}!**\n\n"
+            f"⚠️ **Aapnar 3 diner membership active nei.**\n"
+            f"Membership kinte nicher menu babohar korun.\n\n"
+            f"💵 **Fee:** ৳30 BDT\n"
+            f"💳 **Aapnar Balance:** ৳{balance_bdt:.2f} BDT"
         )
         sub_keyboard = [
             [KeyboardButton("🛒 Buy 3-Days Membership (৳30)")],
@@ -138,41 +134,114 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# --- TEXT BUTTON HANDLER ---
+def get_country_capacity(service_code: str, country_code: str):
+    """VAK-SMS theke specific country-r stock/capacity check korbe"""
+    url = f"https://vak-sms.com/api/getMiniNum/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={country_code}"
+    try:
+        res = requests.get(url).json()
+        if "count" in res:
+            return res["count"]
+        elif service_code in res:
+            return res[service_code]
+        return 0
+    except Exception:
+        return 0
+
+
+# --- BUTTON NAVIGATION & ACTIONS ---
 
 async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global active_country
     user_id = update.effective_user.id
     text = update.message.text.strip()
     u_data = get_user_data(user_id)
 
-    if text == "🔄 Refresh Menu":
+    if text in ["🔄 Refresh Menu", "🔙 Main Menu"]:
         await start(update, context)
         return
 
+    # Buy Number Menu & Stock Capacity Show
+    if text == "🛒 Buy Number":
+        tg_cap = get_country_capacity("tg", active_country)
+        wa_cap = get_country_capacity("wa", active_country)
+
+        buy_keyboard = [
+            [KeyboardButton(f"✈️ Telegram ({tg_cap} Left) - ৳60"), KeyboardButton(f"💬 WhatsApp ({wa_cap} Left) - ৳75")],
+            [KeyboardButton("🔙 Main Menu")]
+        ]
+        await update.message.reply_text(
+            f"📱 **Selected Country: `{active_country.upper()}`**\n"
+            f"Nicher available stock dekhe service select korun:",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(buy_keyboard, resize_keyboard=True)
+        )
+        return
+
+    # Check OTP Action
+    if text == "📩 Check Last OTP":
+        id_num = u_data.get("last_id_num")
+        if not id_num:
+            await update.message.reply_text("❌ Aapnar kono active number order nei.")
+            return
+
+        url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
+        try:
+            res = requests.get(url).json()
+            if "smsCode" in res and res["smsCode"]:
+                await update.message.reply_text(f"🔑 **Aapnar OTP Code:** `{res['smsCode']}`", parse_mode="Markdown")
+            else:
+                await update.message.reply_text("⏳ Ekhono kono SMS aseni. Ektu por Check OTP-te chapun.")
+        except Exception as e:
+            await update.message.reply_text(f"Error: {str(e)}")
+        return
+
+    # Admin Panel Actions
     if text == "⚙️ Admin Panel":
         if user_id != ADMIN_ID:
             return
-        admin_msg = (
-            "⚙️ **Admin Control Panel**\n\n"
-            "কমান্ডসমূহ টাইপ করে ব্যবহার করুন:\n"
-            "• `/users` - ইউজারের তালিকা\n"
-            "• `/setprice CODE BDT` - দাম পরিবর্তন (যেমন: `/setprice tg 50`)\n"
-            "• `/ban USER_ID` - ইউজার ব্যান করা\n"
-            "• `/unban USER_ID` - ব্যান তোলা\n"
-            "• `/addbalance USER_ID BDT` - ব্যালেন্স দেওয়া"
+        admin_keyboard = [
+            [KeyboardButton("📋 View Users List")],
+            [KeyboardButton("🌐 Set Country Code")],
+            [KeyboardButton("🔙 Main Menu")]
+        ]
+        await update.message.reply_text(
+            f"⚙️ **Admin Control Panel**\n\nCurrent Active Country: `{active_country}`", 
+            parse_mode="Markdown", 
+            reply_markup=ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
         )
-        await update.message.reply_text(admin_msg, parse_mode="Markdown")
+        return
+
+    if text == "🌐 Set Country Code":
+        if user_id != ADMIN_ID:
+            return
+        await update.message.reply_text(
+            "Country code set korar jonno type korun:\n`/setcountry CODE`\n\nExample:\n`/setcountry ru` (Russia)\n`/setcountry us` (USA)\n`/setcountry id` (Indonesia)",
+            parse_mode="Markdown"
+        )
+        return
+
+    if text == "📋 View Users List":
+        if user_id != ADMIN_ID:
+            return
+        if not users_db:
+            await update.message.reply_text("Kono user data nei.")
+            return
+        msg = "📋 **User List:**\n\n"
+        for uid, uinfo in users_db.items():
+            status = "BANNED 🚫" if uinfo.get("banned") else ("ACTIVE 🟢" if check_and_update_membership(uid) else "EXPIRED 🔴")
+            msg += f"• ID: `{uid}` | BDT: ৳{uinfo['balance_bdt']:.1f} | {status}\n"
+        await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
     if text == "🛒 Buy 3-Days Membership (৳30)":
         fee_bdt = 30.0
         if check_and_update_membership(user_id) and user_id != ADMIN_ID:
-            await update.message.reply_text("আপনার মেম্বারশিপ ইতিমধ্যেই সক্রিয় আছে!")
+            await update.message.reply_text("Aapnar membership itomoddhe active ache!")
             return
 
         if u_data["balance_bdt"] < fee_bdt:
             await update.message.reply_text(
-                f"❌ পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳৩০, আপনার আছে: ৳{u_data['balance_bdt']:.2f}\n\nপ্রথমে Deposit Balance বাটনে চাপুন।"
+                f"❌ Porjapto balance nei!\nProyojon: ৳30, Aapnar ache: ৳{u_data['balance_bdt']:.2f}\n\nDeposit Balance-e chapun."
             )
             return
 
@@ -181,7 +250,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         u_data["expiry"] = datetime.now() + timedelta(days=3)
 
         await update.message.reply_text(
-            f"🎉 ৩ দিনের মেম্বারশিপ চালু হয়েছে!\nঅবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f}",
+            f"🎉 3 diner membership chalu hoyeche!\nOboshishto Balance: ৳{u_data['balance_bdt']:.2f}",
             reply_markup=build_main_keyboard(user_id)
         )
         return
@@ -192,12 +261,12 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            "পেমেন্ট মেথড সিলেক্ট করুন:",
+            "Payment method select korun:",
             reply_markup=ReplyKeyboardMarkup(dep_keyboard, resize_keyboard=True)
         )
         return
 
-    # সার্ভিস কেনা চেক (Telegram / WhatsApp)
+    # Number Buying Logic
     service_code = None
     service_name = ""
     price_bdt = 0.0
@@ -213,16 +282,17 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if service_code:
         if not check_and_update_membership(user_id):
-            await update.message.reply_text("আপনার মেম্বারশিপ শেষ হয়ে গেছে! প্রথমে মেম্বারশিপ কিনুন।")
+            await update.message.reply_text("Aapnar membership shesh hoye geche!")
             return
 
         if user_id != ADMIN_ID and u_data["balance_bdt"] < price_bdt:
             await update.message.reply_text(
-                f"❌ পর্যাপ্ত ব্যালেন্স নেই!\nপ্রয়োজন: ৳{price_bdt:.2f} BDT\nবর্তমান ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT"
+                f"❌ Porjapto balance nei!\nProyojon: ৳{price_bdt:.2f} BDT\nBortoman Balance: ৳{u_data['balance_bdt']:.2f} BDT"
             )
             return
 
-        url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country=ru"
+        # Fetch number based on Admin's selected country
+        url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={active_country}"
         try:
             res = requests.get(url).json()
             if "tel" in res and "idNum" in res:
@@ -231,42 +301,50 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                 phone_num = res["tel"]
                 id_num = res["idNum"]
+                u_data["last_id_num"] = id_num
+
+                otp_keyboard = [
+                    [KeyboardButton("📩 Check Last OTP")],
+                    [KeyboardButton("🛒 Buy Number"), KeyboardButton("🔙 Main Menu")]
+                ]
 
                 await update.message.reply_text(
-                    f"✅ **নম্বর নেওয়া সফল হয়েছে!**\n\n"
-                    f"সার্ভিস: {service_name}\n"
-                    f"কাটা হয়েছে: ৳{price_bdt:.2f} BDT\n"
-                    f"অবশিষ্ট ব্যালেন্স: ৳{u_data['balance_bdt']:.2f} BDT\n\n"
-                    f"📱 **নম্বর:** `{phone_num}`\n"
+                    f"✅ **Number Order Successful!**\n\n"
+                    f"Service: {service_name}\n"
+                    f"Country: `{active_country.upper()}`\n"
+                    f"Cost: ৳{price_bdt:.2f} BDT\n"
+                    f"Balance: ৳{u_data['balance_bdt']:.2f} BDT\n\n"
+                    f"📱 **Number:** `{phone_num}`\n"
                     f"🆔 **ID Num:** `{id_num}`\n\n"
-                    f"OTP চেক করতে টাইপ করুন: `/check_{id_num}`",
-                    parse_mode="Markdown"
+                    f"OTP pete **Check Last OTP** button-e chapun.",
+                    parse_mode="Markdown",
+                    reply_markup=ReplyKeyboardMarkup(otp_keyboard, resize_keyboard=True)
                 )
 
                 asyncio.create_task(
                     poll_otp_and_forward(context, id_num, phone_num, service_name, user_id)
                 )
             else:
-                await update.message.reply_text(f"নম্বর পাওয়া যায়নি: {res.get('error', 'অজানা সমস্যা')}")
+                err_msg = res.get('error', 'noNumber')
+                await update.message.reply_text(
+                    f"❌ Country `{active_country.upper()}`-e ekhon {service_name} number stock nei ({err_msg}). Admin-ke country change korte bolun."
+                )
         except Exception as e:
-            await update.message.reply_text(f"API এরর: {str(e)}")
+            await update.message.reply_text(f"API Error: {str(e)}")
 
 
-# --- MANUAL OTP CHECK ---
+# --- ADMIN COUNTRY COMMAND ---
 
-async def check_otp_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
-    if text.startswith("/check_"):
-        id_num = text.replace("/check_", "").strip()
-        url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
-        try:
-            res = requests.get(url).json()
-            if "smsCode" in res and res["smsCode"]:
-                await update.message.reply_text(f"🔑 **আপনার OTP কোড:** `{res['smsCode']}`", parse_mode="Markdown")
-            else:
-                await update.message.reply_text("এখনো কোনো SMS আসেনি। আবার চেষ্টা করুন।")
-        except Exception as e:
-            await update.message.reply_text(f"এরর: {str(e)}")
+async def set_country_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global active_country
+    if update.effective_user.id != ADMIN_ID:
+        return
+    if not context.args:
+        await update.message.reply_text("Format: `/setcountry CODE` (Example: `/setcountry ru`)", parse_mode="Markdown")
+        return
+    
+    active_country = context.args[0].lower()
+    await update.message.reply_text(f"✅ Bot Country successfuly changed to: `{active_country.upper()}`", parse_mode="Markdown")
 
 
 # --- BACKGROUND OTP POLLING ---
@@ -282,7 +360,7 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                 try:
                     await context.bot.send_message(
                         chat_id=user_id,
-                        text=f"🔑 **আপনার OTP কোড:** `{otp_code}`\n📱 **নম্বর:** `{phone_num}`",
+                        text=f"🔑 **Aapnar OTP Code:** `{otp_code}`\n📱 **Number:** `{phone_num}`",
                         parse_mode="Markdown"
                     )
                 except Exception:
@@ -291,11 +369,11 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                 if OTP_GROUP_ID:
                     try:
                         forward_msg = (
-                            f"📩 **নতুন OTP প্রাপ্তি!**\n\n"
-                            f"🛠 **সার্ভিস:** {service_name}\n"
-                            f"📱 **নম্বর:** `{phone_num}`\n"
+                            f"📩 **Notun OTP Prapti!**\n\n"
+                            f"🛠 **Service:** {service_name}\n"
+                            f"📱 **Number:** `{phone_num}`\n"
                             f"🔑 **OTP Code:** `{otp_code}`\n"
-                            f"👤 **ইউজার ID:** `{user_id}`"
+                            f"👤 **User ID:** `{user_id}`"
                         )
                         await context.bot.send_message(
                             chat_id=OTP_GROUP_ID,
@@ -307,40 +385,6 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                 break
         except Exception as e:
             logging.error(f"Error checking OTP: {e}")
-
-
-# --- ADMIN COMMANDS ---
-
-async def set_price_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID or len(context.args) < 2:
-        await update.message.reply_text("ফরম্যাট: `/setprice CODE BDT` (যেমন: `/setprice tg 50`)", parse_mode="Markdown")
-        return
-    code = context.args[0].lower()
-    try:
-        new_price = float(context.args[1])
-        if code == "tg":
-            CUSTOM_PRICES_BDT["Telegram ✈️"]["price_bdt"] = new_price
-            await update.message.reply_text(f"✅ Telegram-এর দাম ৳{new_price:.2f} করা হয়েছে।")
-        elif code == "wa":
-            CUSTOM_PRICES_BDT["WhatsApp 💬"]["price_bdt"] = new_price
-            await update.message.reply_text(f"✅ WhatsApp-এর দাম ৳{new_price:.2f} করা হয়েছে।")
-        else:
-            await update.message.reply_text("ইনভ্যালিড কোড! (tg অথবা wa)")
-    except ValueError:
-        await update.message.reply_text("সঠিক দাম লিখুন।")
-
-
-async def list_users_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    if not users_db:
-        await update.message.reply_text("কোনো ইউজার ডাটা নেই।")
-        return
-    msg = "📋 **ইউজার তালিকা:**\n\n"
-    for uid, uinfo in users_db.items():
-        status = "BANNED 🚫" if uinfo.get("banned") else ("ACTIVE 🟢" if check_and_update_membership(uid) else "EXPIRED 🔴")
-        msg += f"• ID: `{uid}` | BDT: ৳{uinfo['balance_bdt']:.1f} | {status}\n"
-    await update.message.reply_text(msg, parse_mode="Markdown")
 
 
 def main():
@@ -355,9 +399,7 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("users", list_users_cmd))
-    app.add_handler(CommandHandler("setprice", set_price_cmd))
-    app.add_handler(MessageHandler(filters.Regex("^/check_"), check_otp_cmd))
+    app.add_handler(CommandHandler("setcountry", set_country_cmd))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_buttons))
 
     print("Bot is running...")
