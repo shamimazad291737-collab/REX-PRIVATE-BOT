@@ -4,12 +4,13 @@ import threading
 import asyncio
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
-from telegram import ReplyKeyboardMarkup, KeyboardButton, Update
+from telegram import ReplyKeyboardMarkup, KeyboardButton, Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
     Application,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
 )
 import requests
@@ -22,7 +23,6 @@ logging.basicConfig(
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
-# Aponar provide kora API Key default vabe set kora holo
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
 ADMIN_BKASH = os.getenv("ADMIN_BKASH", "Not Set")
 ADMIN_BINANCE = os.getenv("ADMIN_BINANCE", "Not Set")
@@ -35,7 +35,6 @@ flask_app = Flask("")
 def home():
     return "Bot is Alive & Running!", 200
 
-# VAK-SMS Webhook Endpoint
 @flask_app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.json
@@ -52,13 +51,15 @@ def run_flask():
 
 # Databases & Global States
 users_db = {}
-active_country = "ru"  # Default active country
-admin_waiting_country_search = {}
+active_country = "hk"  # Default Hong Kong
 
+# Admin Dynamic Pricing State (in BDT)
 CUSTOM_PRICES_BDT = {
-    "Telegram ✈️": {"code": "tg", "price_bdt": 60.0},
-    "WhatsApp 💬": {"code": "wa", "price_bdt": 75.0},
+    "tg": 60.0,
+    "wa": 75.0,
 }
+
+admin_input_state = {}
 
 
 def get_user_data(user_id: int) -> dict:
@@ -117,7 +118,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     main_markup = build_main_keyboard(user.id)
 
     if is_admin or is_active:
-        expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **Membership Expiry:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
+        expiry_info = "👑 **Admin Unlimited Access**" if is_admin else f"⏳ **Expiry:** {u_data['expiry'].strftime('%Y-%m-%d %H:%M') if u_data.get('expiry') else 'N/A'}"
         
         msg = (
             f"👋 **Swagotom {user.first_name}!**\n\n"
@@ -130,8 +131,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         msg = (
             f"👋 **Swagotom {user.first_name}!**\n\n"
-            f"⚠️ **Aapnar 3 diner membership active nei.**\n"
-            f"Membership kinte nicher menu babohar korun.\n\n"
+            f"⚠️ **Aapnar membership active nei.**\n\n"
             f"💵 **Fee:** ৳30 BDT\n"
             f"💳 **Aapnar Balance:** ৳{balance_bdt:.2f} BDT"
         )
@@ -145,7 +145,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def get_country_capacity(service_code: str, country_code: str):
-    """VAK-SMS API theke stock capacity anar function"""
     url = f"https://vak-sms.com/api/getMiniNum/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={country_code}"
     try:
         res = requests.get(url).json()
@@ -167,18 +166,41 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     text = update.message.text.strip()
     u_data = get_user_data(user_id)
 
-    # Main Menu Navigation
     if text in ["🔄 Refresh Menu", "🔙 Main Menu"]:
-        admin_waiting_country_search[user_id] = False
+        admin_input_state[user_id] = None
         await start(update, context)
         return
 
-    # Admin Country Code Button Selection Logic (Kono Command Type Chara)
-    if text.startswith("Flag ") or text.startswith("Select Country:"):
+    # Admin Input Price or Country Handling
+    state = admin_input_state.get(user_id)
+    if state and user_id == ADMIN_ID:
+        if state == "SET_TG_PRICE":
+            try:
+                CUSTOM_PRICES_BDT["tg"] = float(text)
+                admin_input_state[user_id] = None
+                await update.message.reply_text(f"✅ Telegram price updated to: ৳{CUSTOM_PRICES_BDT['tg']} BDT")
+            except ValueError:
+                await update.message.reply_text("❌ Vul price! Shudu shongkhya likhun (e.g. 65).")
+            return
+        elif state == "SET_WA_PRICE":
+            try:
+                CUSTOM_PRICES_BDT["wa"] = float(text)
+                admin_input_state[user_id] = None
+                await update.message.reply_text(f"✅ WhatsApp price updated to: ৳{CUSTOM_PRICES_BDT['wa']} BDT")
+            except ValueError:
+                await update.message.reply_text("❌ Vul price! Shudu shongkhya likhun (e.g. 80).")
+            return
+        elif state == "SEARCH_COUNTRY":
+            active_country = text.lower().strip()
+            admin_input_state[user_id] = None
+            await update.message.reply_text(f"✅ Country set to: `{active_country.upper()}`", parse_mode="Markdown")
+            return
+
+    # Country Quick Select Buttons
+    if text.startswith("Select Country:"):
         if user_id == ADMIN_ID:
             code = text.split(":")[-1].strip().lower()
             active_country = code
-            admin_waiting_country_search[user_id] = False
             await update.message.reply_text(
                 f"✅ **Active Country Set Done!**\nBortoman Active Country: `{active_country.upper()}`",
                 parse_mode="Markdown",
@@ -186,33 +208,16 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
             )
             return
 
-    # Admin Search Text Input Handling
-    if admin_waiting_country_search.get(user_id, False) and user_id == ADMIN_ID:
-        search_code = text.lower().strip()
-        tg_cnt = get_country_capacity("tg", search_code)
-        wa_cnt = get_country_capacity("wa", search_code)
-
-        confirm_keyboard = [
-            [KeyboardButton(f"Select Country: {search_code}")],
-            [KeyboardButton("🌐 Set Country Code"), KeyboardButton("🔙 Main Menu")]
-        ]
-        await update.message.reply_text(
-            f"🔍 **Search Result for `{search_code.upper()}`:**\n\n"
-            f"✈️ Telegram Capacity: **{tg_cnt}**\n"
-            f"💬 WhatsApp Capacity: **{wa_cnt}**\n\n"
-            f"Aapni ki ei country-ti active korte chan?",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(confirm_keyboard, resize_keyboard=True)
-        )
-        return
-
-    # Buy Number Option
+    # Buy Number Menu
     if text == "🛒 Buy Number":
         tg_cap = get_country_capacity("tg", active_country)
         wa_cap = get_country_capacity("wa", active_country)
 
+        tg_p = CUSTOM_PRICES_BDT["tg"]
+        wa_p = CUSTOM_PRICES_BDT["wa"]
+
         buy_keyboard = [
-            [KeyboardButton(f"✈️ Telegram ({tg_cap} Left) - ৳60"), KeyboardButton(f"💬 WhatsApp ({wa_cap} Left) - ৳75")],
+            [KeyboardButton(f"✈️ Telegram ({tg_cap} Left) - ৳{tg_p:.0f}"), KeyboardButton(f"💬 WhatsApp ({wa_cap} Left) - ৳{wa_p:.0f}")],
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
@@ -246,34 +251,57 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         if user_id != ADMIN_ID:
             return
         admin_keyboard = [
-            [KeyboardButton("📋 View Users List")],
-            [KeyboardButton("🌐 Set Country Code")],
+            [KeyboardButton("✏️ Change Service Prices")],
+            [KeyboardButton("🌐 Set Country Code"), KeyboardButton("📋 View Users List")],
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            f"⚙️ **Admin Control Panel**\n\nCurrent Active Country: `{active_country.upper()}`", 
+            f"⚙️ **Admin Control Panel**\n\n"
+            f"Current Country: `{active_country.upper()}`\n"
+            f"Telegram Price: ৳{CUSTOM_PRICES_BDT['tg']}\n"
+            f"WhatsApp Price: ৳{CUSTOM_PRICES_BDT['wa']}", 
             parse_mode="Markdown", 
             reply_markup=ReplyKeyboardMarkup(admin_keyboard, resize_keyboard=True)
         )
         return
 
-    # Country Select Menu (Quick Buttons + Search Option)
+    if text == "✏️ Change Service Prices":
+        if user_id != ADMIN_ID:
+            return
+        price_keyboard = [
+            [KeyboardButton("Change Telegram Price"), KeyboardButton("Change WhatsApp Price")],
+            [KeyboardButton("🔙 Main Menu")]
+        ]
+        await update.message.reply_text(
+            "Kon service-er price change korte chan?",
+            reply_markup=ReplyKeyboardMarkup(price_keyboard, resize_keyboard=True)
+        )
+        return
+
+    if text == "Change Telegram Price":
+        if user_id == ADMIN_ID:
+            admin_input_state[user_id] = "SET_TG_PRICE"
+            await update.message.reply_text("Notun Telegram price (BDT) likhe pathan (e.g. 60):")
+            return
+
+    if text == "Change WhatsApp Price":
+        if user_id == ADMIN_ID:
+            admin_input_state[user_id] = "SET_WA_PRICE"
+            await update.message.reply_text("Notun WhatsApp price (BDT) likhe pathan (e.g. 75):")
+            return
+
     if text == "🌐 Set Country Code":
         if user_id != ADMIN_ID:
             return
-        
-        admin_waiting_country_search[user_id] = True
-
+        admin_input_state[user_id] = "SEARCH_COUNTRY"
         country_buttons = [
-            [KeyboardButton("Select Country: ru"), KeyboardButton("Select Country: us")],
-            [KeyboardButton("Select Country: id"), KeyboardButton("Select Country: hk")],
+            [KeyboardButton("Select Country: hk"), KeyboardButton("Select Country: ru")],
+            [KeyboardButton("Select Country: us"), KeyboardButton("Select Country: id")],
             [KeyboardButton("Select Country: in"), KeyboardButton("Select Country: ph")],
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            "🌍 **Country Selection Panel**\n\n"
-            "1. Direct country set korte nicher button-e chapun.\n"
-            "2. Nije kono country check korte chasle code type korun (e.g. `hk`, `vn`, `br`):",
+            "🌍 **Select or Type Country Code**\nDirect button-e chapun ba code likhun (e.g. `hk`):",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(country_buttons, resize_keyboard=True)
         )
@@ -292,40 +320,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
-    if text == "🛒 Buy 3-Days Membership (৳30)":
-        fee_bdt = 30.0
-        if check_and_update_membership(user_id) and user_id != ADMIN_ID:
-            await update.message.reply_text("Aapnar membership itomoddhe active ache!")
-            return
-
-        if u_data["balance_bdt"] < fee_bdt:
-            await update.message.reply_text(
-                f"❌ Porjapto balance nei!\nProyojon: ৳30, Aapnar ache: ৳{u_data['balance_bdt']:.2f}\n\nDeposit Balance-e chapun."
-            )
-            return
-
-        u_data["balance_bdt"] -= fee_bdt
-        u_data["approved"] = True
-        u_data["expiry"] = datetime.now() + timedelta(days=3)
-
-        await update.message.reply_text(
-            f"🎉 3 diner membership chalu hoyeche!\nOboshishto Balance: ৳{u_data['balance_bdt']:.2f}",
-            reply_markup=build_main_keyboard(user_id)
-        )
-        return
-
-    if text == "💰 Deposit Balance":
-        dep_keyboard = [
-            [KeyboardButton("bKash (BDT)"), KeyboardButton("Binance (USDT)")],
-            [KeyboardButton("🔙 Main Menu")]
-        ]
-        await update.message.reply_text(
-            "Payment method select korun:",
-            reply_markup=ReplyKeyboardMarkup(dep_keyboard, resize_keyboard=True)
-        )
-        return
-
-    # Purchase Logic
+    # Purchase Logic ($0.07 Minimum Cheap Price API Call)
     service_code = None
     service_name = ""
     price_bdt = 0.0
@@ -333,11 +328,11 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
     if "Telegram" in text:
         service_code = "tg"
         service_name = "Telegram ✈️"
-        price_bdt = CUSTOM_PRICES_BDT["Telegram ✈️"]["price_bdt"]
+        price_bdt = CUSTOM_PRICES_BDT["tg"]
     elif "WhatsApp" in text:
         service_code = "wa"
         service_name = "WhatsApp 💬"
-        price_bdt = CUSTOM_PRICES_BDT["WhatsApp 💬"]["price_bdt"]
+        price_bdt = CUSTOM_PRICES_BDT["wa"]
 
     if service_code:
         if not check_and_update_membership(user_id):
@@ -346,13 +341,20 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         if user_id != ADMIN_ID and u_data["balance_bdt"] < price_bdt:
             await update.message.reply_text(
-                f"❌ Porjapto balance nei!\nProyojon: ৳{price_bdt:.2f} BDT\nBortoman Balance: ৳{u_data['balance_bdt']:.2f} BDT"
+                f"❌ Balance nei!\nPrice: ৳{price_bdt:.2f} BDT\nAche: ৳{u_data['balance_bdt']:.2f} BDT"
             )
             return
 
-        url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={active_country}"
+        # Direct $0.07 options target param
+        url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={active_country}&price=0.07"
+        
         try:
             res = requests.get(url).json()
+            # Try without price parameter if default price filter fails
+            if isinstance(res, dict) and "error" in res and res["error"] == "noNumber":
+                url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service_code}&country={active_country}"
+                res = requests.get(url).json()
+
             if isinstance(res, dict) and "tel" in res and "idNum" in res:
                 if user_id != ADMIN_ID:
                     u_data["balance_bdt"] -= price_bdt
@@ -370,8 +372,7 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
                     f"✅ **Number Order Successful!**\n\n"
                     f"Service: {service_name}\n"
                     f"Country: `{active_country.upper()}`\n"
-                    f"Cost: ৳{price_bdt:.2f} BDT\n"
-                    f"Balance: ৳{u_data['balance_bdt']:.2f} BDT\n\n"
+                    f"Cost: ৳{price_bdt:.2f} BDT\n\n"
                     f"📱 **Number:** `{phone_num}`\n"
                     f"🆔 **ID Num:** `{id_num}`\n\n"
                     f"OTP pete **Check Last OTP** button-e chapun.",
@@ -383,9 +384,9 @@ async def handle_text_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE
                     poll_otp_and_forward(context, id_num, str(phone_num), service_name, user_id)
                 )
             else:
-                err_msg = res.get('error', 'noNumber') if isinstance(res, dict) else 'noNumber'
+                err = res.get('error', 'Unknown Error') if isinstance(res, dict) else 'Error'
                 await update.message.reply_text(
-                    f"❌ Country `{active_country.upper()}`-e {service_name} number stock nei ({err_msg}). Admin-ke onno country set korte bolun."
+                    f"❌ VAK-SMS Error: `{err}`\n(Account balance ba stock check kora dorkar)."
                 )
         except Exception as e:
             await update.message.reply_text(f"API Error: {str(e)}")
@@ -409,23 +410,6 @@ async def poll_otp_and_forward(context: ContextTypes.DEFAULT_TYPE, id_num: str, 
                     )
                 except Exception:
                     pass
-
-                if OTP_GROUP_ID:
-                    try:
-                        forward_msg = (
-                            f"📩 **Notun OTP Prapti!**\n\n"
-                            f"🛠 **Service:** {service_name}\n"
-                            f"📱 **Number:** `{phone_num}`\n"
-                            f"🔑 **OTP Code:** `{otp_code}`\n"
-                            f"👤 **User ID:** `{user_id}`"
-                        )
-                        await context.bot.send_message(
-                            chat_id=OTP_GROUP_ID,
-                            text=forward_msg,
-                            parse_mode="Markdown"
-                        )
-                    except Exception as err:
-                        logging.error(f"Failed to forward OTP: {err}")
                 break
         except Exception as e:
             logging.error(f"Error checking OTP: {e}")
