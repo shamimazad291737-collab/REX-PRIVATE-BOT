@@ -20,10 +20,9 @@ logging.basicConfig(
 
 # Environment Variables
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-# স্ক্রিনশটের দেওয়া আপনার VAK-SMS API Key
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
 
-# Flask Web Server Keep-Alive (For Render/Replit)
+# Flask Web Server Keep-Alive
 flask_app = Flask("")
 
 @flask_app.route("/")
@@ -59,10 +58,18 @@ def get_vak_balance():
     except Exception as e:
         return f"API Error: {str(e)}"
 
+# Fixed buy function specifying price parameter ($0.07)
 def buy_vak_number(service: str, country: str):
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}"
+    # &price=0.07 explicitly pass kora hoyeche cheap tier target korar jonno
+    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&price=0.07"
     try:
         res = requests.get(url).json()
+        
+        # Jodi price param shoho noNumber ashe, tokhon standard request try korbe
+        if isinstance(res, dict) and res.get("error") == "noNumber":
+            fallback_url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}"
+            res = requests.get(fallback_url).json()
+            
         return res
     except Exception as e:
         return {"error": str(e)}
@@ -76,7 +83,6 @@ def fetch_otp_code(id_num: str):
         return {"error": str(e)}
 
 def set_number_status(id_num: str, status: str):
-    # status: 'bad' (cancel/reject), 'end' (successfully finished)
     url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
         res = requests.get(url).json()
@@ -85,11 +91,11 @@ def set_number_status(id_num: str, status: str):
         return {"error": str(e)}
 
 
-# Command & Message Handlers
+# Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id not in user_selected_country:
-        user_selected_country[user_id] = "hk" # Default Hong Kong
+        user_selected_country[user_id] = "hk" # Default HK
     if user_id not in user_selected_service:
         user_selected_service[user_id] = "wa" # Default WhatsApp
 
@@ -97,11 +103,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     s_code = user_selected_service[user_id].upper()
 
     welcome_msg = (
-        f"👋 **VAK-SMS Full Account Bot-এ স্বাগতম!**\n\n"
-        f"⚙️ **বর্তমান কনফিগারেশন:**\n"
-        f"• Country Code: `{c_code}`\n"
-        f"• Service: `{s_code}`\n\n"
-        f"নিচের মেনু থেকে যেকোনো অপশন বেছে নিন:"
+        f"👋 **VAK-SMS Bot-এ স্বাগতম!**\n\n"
+        f"⚙️ **বর্তমান সেটআপ:**\n"
+        f"• Country: `{c_code}`\n"
+        f"• Service: `{s_code}`\n"
+        f"• Target Price: `$0.07`\n\n"
+        f"নিচের মেনু থেকে অপশন বেছে নিন:"
     )
     await update.message.reply_text(welcome_msg, parse_mode="Markdown", reply_markup=get_main_keyboard())
 
@@ -110,13 +117,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     text = update.message.text.strip()
 
-    # 1. Check Account Balance
+    # 1. Balance
     if text == "💳 Account Balance":
         balance = get_vak_balance()
-        await update.message.reply_text(f"💰 **আপনার VAK-SMS ব্যালেন্স:** `{balance}`", parse_mode="Markdown")
+        await update.message.reply_text(f"💰 **VAK-SMS Balance:** `{balance}`", parse_mode="Markdown")
         return
 
-    # 2. Set Country
+    # 2. Country
     if text == "🌐 Set Country":
         country_kb = [
             [KeyboardButton("Country: HK (Hong Kong)"), KeyboardButton("Country: US (USA)")],
@@ -125,7 +132,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            "🌐 **দেশ নির্বাচন করুন অথবা কান্ট্রি কোড লিখে পাঠান (যেমন: `hk`, `us`, `ru`):**",
+            "🌐 **দেশ নির্বাচন করুন অথবা কান্ট্রি কোড লিখে পাঠান (যেমন: `hk`, `us`):**",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True)
         )
@@ -134,19 +141,18 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("Country:"):
         code = text.split(":")[1].split("(")[0].strip().lower()
         user_selected_country[user_id] = code
-        await update.message.reply_text(f"✅ Country সেট করা হয়েছে: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard())
+        await update.message.reply_text(f"✅ Country সেট হয়েছে: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard())
         return
 
-    # 3. Set Service
+    # 3. Service
     if text == "📱 Set Service":
         service_kb = [
             [KeyboardButton("Service: WA (WhatsApp)"), KeyboardButton("Service: TG (Telegram)")],
             [KeyboardButton("Service: IG (Instagram)"), KeyboardButton("Service: GO (Google/Gmail)")],
-            [KeyboardButton("Service: IM (Imo)"), KeyboardButton("Service: VI (Viber)")],
             [KeyboardButton("🔙 Main Menu")]
         ]
         await update.message.reply_text(
-            "📱 **সার্ভিস নির্বাচন করুন অথবা শর্ট কোড পাঠান (যেমন: `wa`, `tg`, `go`):**",
+            "📱 **সার্ভিস নির্বাচন করুন:**",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(service_kb, resize_keyboard=True)
         )
@@ -155,19 +161,19 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text.startswith("Service:"):
         code = text.split(":")[1].split("(")[0].strip().lower()
         user_selected_service[user_id] = code
-        await update.message.reply_text(f"✅ Service সেট করা হয়েছে: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard())
+        await update.message.reply_text(f"✅ Service সেট হয়েছে: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard())
         return
 
     if text == "🔙 Main Menu":
         await start(update, context)
         return
 
-    # 4. Buy Number
+    # 4. Buy Number ($0.07 Price Explicit Target)
     if text == "🛒 Buy Number":
         country = user_selected_country.get(user_id, "hk")
         service = user_selected_service.get(user_id, "wa")
 
-        await update.message.reply_text(f"⏳ `{country.upper()}` দেশের জন্য `{service.upper()}` নম্বর কেনা হচ্ছে...")
+        await update.message.reply_text(f"⏳ `{country.upper()}` দেশের জন্য `{service.upper()}` নম্বর কিনার চেষ্টা করা হচ্ছে ($0.07 Rate)...")
 
         res = buy_vak_number(service, country)
 
@@ -179,56 +185,50 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(
                 f"✅ **নম্বর কেনা সফল হয়েছে!**\n\n"
                 f"📱 **নম্বর:** `{phone_num}`\n"
-                f"🆔 **Order ID:** `{id_num}`\n"
+                f"🆔 **ID Num:** `{id_num}`\n"
                 f"🌍 **Country:** `{country.upper()}`\n"
                 f"💬 **Service:** `{service.upper()}`\n\n"
-                f"ওটিপি চেক করতে **📩 Check Active OTP** বাটনে চাপুন।",
+                f"OTP দেখতে **📩 Check Active OTP** বাটনে চাপুন।",
                 parse_mode="Markdown",
                 reply_markup=get_main_keyboard()
             )
 
-            # Background Task for Auto OTP Checking
             asyncio.create_task(auto_check_otp(context, user_id, id_num, str(phone_num)))
         else:
-            err_msg = res.get("error", "Unknown Error / Out of Stock") if isinstance(res, dict) else "Error"
+            err_msg = res.get("error", "noMoney/noNumber") if isinstance(res, dict) else "Error"
             await update.message.reply_text(f"❌ **নম্বর কেনা সম্ভব হয়নি:** `{err_msg}`", parse_mode="Markdown")
         return
 
-    # 5. Manual OTP Check
+    # 5. Check OTP
     if text == "📩 Check Active OTP":
         id_num = active_orders.get(user_id)
         if not id_num:
-            await update.message.reply_text("❌ আপনার কোনো অ্যাক্টিভ নম্বর অর্ডার নেই।")
+            await update.message.reply_text("❌ আপনার কোনো অ্যাক্টিভ নম্বর নেই।")
             return
 
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             await update.message.reply_text(f"🔑 **আপনার OTP কোড:** `{res['smsCode']}`", parse_mode="Markdown")
         else:
-            await update.message.reply_text("⏳ এখনো কোনো OTP আসেনি। একটু পর আবার চেষ্টা করুন।")
+            await update.message.reply_text("⏳ এখনো OTP আসেনি, একটু পর আবার চেষ্টা করুন।")
         return
 
-    # 6. Cancel Number
+    # 6. Cancel
     if text == "❌ Cancel Number":
         id_num = active_orders.get(user_id)
         if not id_num:
-            await update.message.reply_text("❌ ক্যান্সেল করার মতো কোনো অ্যাক্টিভ নম্বর নেই।")
+            await update.message.reply_text("❌ কোনো নম্বর অ্যাক্টিভ নেই।")
             return
 
-        res = set_number_status(id_num, "bad")
+        set_number_status(id_num, "bad")
         active_orders.pop(user_id, None)
-        await update.message.reply_text("✅ নম্বরটি ক্যান্সেল করা হয়েছে এবং ব্যালেন্স রিফান্ড করা হয়েছে।")
+        await update.message.reply_text("✅ নম্বরটি ক্যান্সেল করে রিফান্ড করা হয়েছে।")
         return
 
-    # Direct code input fallback
-    if len(text) <= 3:
-        user_selected_country[user_id] = text.lower()
-        await update.message.reply_text(f"✅ Country code updated to: `{text.upper()}`", parse_mode="Markdown")
 
-
-# Background Worker to poll OTP automatically
+# Background Auto OTP Check
 async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str):
-    for _ in range(30):  # Check every 6 seconds for 3 minutes
+    for _ in range(30):
         await asyncio.sleep(6)
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
@@ -236,10 +236,10 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"🔔 **নতুন SMS/OTP এসেছে!**\n\n📱 **নম্বর:** `{phone_num}`\n🔑 **OTP Code:** `{otp}`",
+                    text=f"🔔 **নতুন OTP এসেছে!**\n\n📱 **নম্বর:** `{phone_num}`\n🔑 **OTP Code:** `{otp}`",
                     parse_mode="Markdown"
                 )
-                set_number_status(id_num, "end") # Mark completed
+                set_number_status(id_num, "end")
             except Exception:
                 pass
             break
@@ -259,7 +259,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Bot fully initialized...")
+    print("VAK-SMS Bot Running...")
     app.run_polling(close_loop=False)
 
 
