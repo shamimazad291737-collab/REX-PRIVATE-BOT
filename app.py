@@ -34,7 +34,10 @@ logging.basicConfig(
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Admin Telegram ID
-OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", "-100XXXXXXXXXX")  # OTP Channel/Group ID
+
+# ⚠️ APNAR OTP GROUP/CHANNEL ID EKHANE DEBEN (E.g. "-100123456789")
+OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", "-100XXXXXXXXXX")  
+
 BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
 ADMIN_BKASH = "01858582881"
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -79,13 +82,7 @@ def mask_number(phone_str: str) -> str:
     return f"{prefix}{masked_part}{suffix}"
 
 def get_country_flag(country_code: str) -> str:
-    flags = {
-        "hk": "🇭🇰",
-        "us": "🇺🇸",
-        "ru": "🇷🇺",
-        "in": "🇮🇳"
-    }
-    return flags.get(country_code.lower(), "🌐")
+    return "🇭🇰"
 
 # Mongo DB Helper Functions
 def get_user(user_id: int):
@@ -114,8 +111,7 @@ def get_rate(service_code: str):
     doc = settings_col.find_one({"type": "rates"})
     if doc and service_code in doc.get("rates", {}):
         return doc["rates"][service_code]
-    defaults = {"wa": 0.10, "tg": 0.15, "go": 0.10, "im": 0.10}
-    return defaults.get(service_code, 0.10)
+    return 0.10
 
 def set_rate(service_code: str, rate: float):
     settings_col.update_one(
@@ -154,9 +150,9 @@ def set_number_status(id_num: str, status: str):
     except Exception as e:
         return {"error": str(e)}
 
-def buy_vak_number(service: str, country: str):
+def buy_vak_number(service: str = "wa", country: str = "hk"):
     # Using maxPrice parameter as officially suggested by VAK-SMS support
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice=0.07"
+    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service=wa&country=hk&maxPrice=0.07"
     try:
         res = requests.get(url).json()
         
@@ -230,8 +226,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_msg = (
         f"👋 **VAK-SMS Bot-e Swagotom!**\n\n"
         f"⚙️ **Bortoman Setup:**\n"
-        f"• Country: `{u_data.get('selected_country', 'hk').upper()}`\n"
-        f"• Service: `{u_data.get('selected_service', 'wa').upper()}`\n"
+        f"• Country: `HONG KONG (HK)`\n"
+        f"• Service: `WHATSAPP (WA)`\n"
         f"• Bot Balance: `${u_data.get('balance', 0.0):.2f} USDT`\n"
         f"• Subscription Valid Till: `{exp_str}`\n\n"
         f"Nicher menu theke option beche nin:"
@@ -286,36 +282,32 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_msg, parse_mode="Markdown")
         return
 
-    # 3. Set Country
+    # 3. Set Country (Fixed to Hong Kong)
     if text == "🌐 Set Country":
         country_kb = [
-            [KeyboardButton("Country: HK (Hong Kong)"), KeyboardButton("Country: US (USA)")],
-            [KeyboardButton("Country: RU (Russia)"), KeyboardButton("Country: IN (India)")],
+            [KeyboardButton("Country: HK (Hong Kong)")],
             [KeyboardButton("🔙 Main Menu")]
         ]
-        await update.message.reply_text("🌐 **Desh nirbachon korun:**", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
+        await update.message.reply_text("🌐 **Bortomane shudhu Hong Kong selected ache:**", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
         return
 
     if text.startswith("Country:"):
-        code = text.split(":")[1].split("(")[0].strip().lower()
-        users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": code}})
-        await update.message.reply_text(f"✅ Country set hoyeche: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
+        users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "hk"}})
+        await update.message.reply_text("✅ Country set: `HONG KONG (HK)`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
-    # 4. Set Service
+    # 4. Set Service (Fixed to WhatsApp)
     if text == "📱 Set Service":
         service_kb = [
-            [KeyboardButton("Service: WA (WhatsApp)"), KeyboardButton("Service: TG (Telegram)")],
-            [KeyboardButton("Service: GO (Google/Gmail)"), KeyboardButton("Service: IM (Imo)")],
+            [KeyboardButton("Service: WA (WhatsApp)")],
             [KeyboardButton("🔙 Main Menu")]
         ]
-        await update.message.reply_text("📱 **Service nirbachon korun:**", reply_markup=ReplyKeyboardMarkup(service_kb, resize_keyboard=True))
+        await update.message.reply_text("📱 **Bortomane shudhu WhatsApp selected ache:**", reply_markup=ReplyKeyboardMarkup(service_kb, resize_keyboard=True))
         return
 
     if text.startswith("Service:"):
-        code = text.split(":")[1].split("(")[0].strip().lower()
-        users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": code}})
-        await update.message.reply_text(f"✅ Service set hoyeche: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
+        users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": "wa"}})
+        await update.message.reply_text("✅ Service set: `WHATSAPP (WA)`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
     if text == "🔙 Main Menu":
@@ -324,8 +316,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 5. Buy Number
     if text == "🛒 Buy Number":
-        country = u_data.get("selected_country", "hk")
-        service = u_data.get("selected_service", "wa")
+        country = "hk"
+        service = "wa"
         bot_rate = get_rate(service)
         user_bal = u_data.get("balance", 0.0)
 
@@ -335,7 +327,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        status_msg = await update.message.reply_text(f"⏳ `{country.upper()}` desher jonno `{service.upper()}` number kena hocche...")
+        status_msg = await update.message.reply_text(f"⏳ `HK` desher jonno `WA` number kena hocche...")
 
         res = buy_vak_number(service, country)
 
@@ -352,8 +344,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ **Number Kena Shofol Hoyeche!**\n\n"
                 f"📱 **Number:** `{phone_num}`\n"
                 f"🆔 **ID Num:** `{id_num}`\n"
-                f"🌍 **Country:** `{country.upper()}`\n"
-                f"💬 **Service:** `{service.upper()}`\n"
+                f"🌍 **Country:** `HK`\n"
+                f"💬 **Service:** `WA`\n"
                 f"💵 **Rate:** `${bot_rate:.2f}` USDT *(OTP ashlei balance katbe)*\n\n"
                 f"⏳ *OTP pabar jonno apekkha korun...*",
                 parse_mode="Markdown",
@@ -475,8 +467,6 @@ async def process_otp_success(context, id_num: str, otp: str):
     cost = order_info["cost"]
     phone = order_info["phone"]
     msg_id = order_info["msg_id"]
-    service = order_info.get("service", "wa")
-    country = order_info.get("country", "hk")
 
     # Deduct Balance & Increment OTP Count
     users_col.update_one(
@@ -507,22 +497,12 @@ async def process_otp_success(context, id_num: str, otp: str):
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="Markdown")
 
     # --- OTP Group/Channel Forwarding ---
-    flag = get_country_flag(country)
     masked_phone = mask_number(phone)
-    
-    if service.lower() == "wa":
-        service_text = "Your WhatsApp code"
-    elif service.lower() == "tg":
-        service_text = "Your Telegram code"
-    elif service.lower() == "go":
-        service_text = "Your Google code"
-    else:
-        service_text = f"Your {service.upper()} code"
 
     group_forward_msg = (
-        f"{flag} **Number:** `{masked_phone}`\n"
+        f"🇭🇰 **Number:** `{masked_phone}`\n"
         f"🔑 **OTP:** `{otp}`\n"
-        f"💬 **Message:** `{service_text}: {otp}`"
+        f"💬 **Message:** `Your WhatsApp code: {otp}`"
     )
 
     if OTP_GROUP_ID and OTP_GROUP_ID != "-100XXXXXXXXXX":
@@ -532,6 +512,7 @@ async def process_otp_success(context, id_num: str, otp: str):
                 text=group_forward_msg,
                 parse_mode="Markdown"
             )
+            logging.info(f"OTP Forwarded to Group {OTP_GROUP_ID} successfully.")
         except Exception as e:
             logging.error(f"Failed to forward OTP to group: {e}")
 
@@ -819,7 +800,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with Strict maxPrice=0.07 Parameter...")
+    print("VAK-SMS Full Bot Running with Fixed HK & WA Settings...")
     app.run_polling(close_loop=False)
 
 
