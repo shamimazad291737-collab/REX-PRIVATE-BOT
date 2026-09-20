@@ -33,8 +33,8 @@ logging.basicConfig(
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Apnar Telegram ID
-OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", "-100XXXXXXXXXX")  # OTP Forward Channel/Group ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Admin Telegram ID
+OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", "-100XXXXXXXXXX")  # OTP Channel/Group ID
 BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
 ADMIN_BKASH = "01858582881"
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -69,7 +69,7 @@ ADMIN_BAN, ADMIN_UNBAN, ADMIN_ADD_BAL_USER, ADMIN_ADD_BAL_AMT, ADMIN_RATE_SET = 
 
 # Helper Functions: Formatting & Masking
 def mask_number(phone_str: str) -> str:
-    """Masks all digits of a phone number except the country prefix and last 4 digits."""
+    """Masks digits except country prefix and last 4 digits."""
     clean_num = re.sub(r"[^\d+]", "", str(phone_str))
     if len(clean_num) <= 6:
         return clean_num
@@ -146,24 +146,36 @@ def get_main_keyboard(user_id):
         keyboard.append([KeyboardButton("⚙️ Admin Panel")])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# VAK-SMS API Functions (STRICT $0.07 CHECK)
+# VAK-SMS API Functions
+def set_number_status(id_num: str, status: str):
+    url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
+    try:
+        return requests.get(url).json()
+    except Exception as e:
+        return {"error": str(e)}
+
 def buy_vak_number(service: str, country: str):
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&price=0.07"
+    # Using maxPrice parameter as officially suggested by VAK-SMS support
+    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice=0.07"
     try:
         res = requests.get(url).json()
         
-        # If no number at $0.07 tier, directly reject
+        # If API returns noNumber under maxPrice 0.07
         if isinstance(res, dict) and res.get("error") == "noNumber":
             return {"error": "Stock Out for $0.07 Price Tier!"}
-        
-        # Safety Price Check: Ensure returned price is strictly <= $0.07
-        if isinstance(res, dict) and "price" in res:
-            returned_price = float(res.get("price", 0))
-            if returned_price > 0.07:
-                # Cancel number immediately if API assigns higher rate
-                id_num = str(res.get("idNum"))
-                set_number_status(id_num, "bad")
-                return {"error": f"Higher Price Tier (${returned_price}) Blocked! Only $0.07 Allowed."}
+            
+        # Double safety check for returned price
+        if isinstance(res, dict) and "tel" in res and "idNum" in res:
+            assigned_price = res.get("price")
+            if assigned_price is not None:
+                try:
+                    price_val = float(assigned_price)
+                    if price_val > 0.07:
+                        id_num = str(res["idNum"])
+                        set_number_status(id_num, "bad")
+                        return {"error": f"Stock Out! Price (${price_val:.2f}) exceeded $0.07 limit."}
+                except ValueError:
+                    pass
 
         return res
     except Exception as e:
@@ -179,13 +191,6 @@ def get_vak_balance():
 
 def fetch_otp_code(id_num: str):
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
-    try:
-        return requests.get(url).json()
-    except Exception as e:
-        return {"error": str(e)}
-
-def set_number_status(id_num: str, status: str):
-    url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
         return requests.get(url).json()
     except Exception as e:
@@ -814,7 +819,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with Strict $0.07 Price Limit & MongoDB...")
+    print("VAK-SMS Full Bot Running with Strict maxPrice=0.07 Parameter...")
     app.run_polling(close_loop=False)
 
 
