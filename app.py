@@ -378,16 +378,22 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
-        status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
-        admin_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👥 View All Users", callback_data="admin_view_users")],
-            [InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
-            [InlineKeyboardButton("💵 Set WA Rate", callback_data="admin_rate_start"), InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start")],
-            [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")],
-            [InlineKeyboardButton(f"Bot Status: {status_str}", callback_data="admin_toggle_bot")]
-        ])
-        await update.message.reply_text("🛠 **Admin Control Panel:**", reply_markup=admin_kb)
+        await send_admin_panel(update, context)
         return
+
+async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
+    admin_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👥 View All Users", callback_data="admin_view_users")],
+        [InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
+        [InlineKeyboardButton("💵 Set WA Rate", callback_data="admin_rate_start"), InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start")],
+        [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")],
+        [InlineKeyboardButton(f"Bot Status: {status_str}", callback_data="admin_toggle_bot")]
+    ])
+    if update.message:
+        await update.message.reply_text("🛠 **Admin Control Panel:**", reply_markup=admin_kb, parse_mode="Markdown")
+    elif update.callback_query:
+        await update.callback_query.message.reply_text("🛠 **Admin Control Panel:**", reply_markup=admin_kb, parse_mode="Markdown")
 
 # Callback Handler for General & Admin View/Toggle Actions
 async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -396,7 +402,52 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    if data.startswith("check_otp_"):
+    if data == "admin_view_users" and user_id == ADMIN_ID:
+        users = list(users_col.find())
+        if not users:
+            await query.message.reply_text("📋 Kono registered user nei.")
+            return
+        
+        msg = "👥 **Registered Users & Status:**\n\n"
+        for u in users:
+            uid = u["user_id"]
+            name = u.get("full_name", "User")
+            bal = u.get("balance", 0.0)
+            sub = "Active" if is_subscribed(uid) else "Expired"
+            status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
+            
+            line = f"• **{name}** (`{uid}`): `${bal:.4f}` USDT | Sub: {status}\n"
+            
+            # Message Limit Handled (Telegram 4096 Limit)
+            if len(msg) + len(line) > 4000:
+                await query.message.reply_text(msg, parse_mode="Markdown")
+                msg = ""
+            msg += line
+            
+        if msg:
+            await query.message.reply_text(msg, parse_mode="Markdown")
+
+    elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
+        current_status = is_bot_active()
+        new_status = not current_status
+        set_bot_active(new_status)
+        status_text = "🟢 **Bot ON (Active) kora hoyeche!**" if new_status else "🔴 **Bot OFF (Maintenance Mode) kora hoyeche!**"
+        
+        status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
+        admin_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👥 View All Users", callback_data="admin_view_users")],
+            [InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
+            [InlineKeyboardButton("💵 Set WA Rate", callback_data="admin_rate_start"), InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start")],
+            [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")],
+            [InlineKeyboardButton(f"Bot Status: {status_str}", callback_data="admin_toggle_bot")]
+        ])
+        try:
+            await query.edit_message_reply_markup(reply_markup=admin_kb)
+        except Exception:
+            pass
+        await query.message.reply_text(status_text, parse_mode="Markdown")
+
+    elif data.startswith("check_otp_"):
         id_num = data.split("_")[2]
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
@@ -416,44 +467,6 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         else:
             await query.message.reply_text("❌ Ei order-ti ar active nei ba already OTP ashe geche.")
-
-    elif data == "admin_view_users" and user_id == ADMIN_ID:
-        users = list(users_col.find())
-        if not users:
-            await query.message.reply_text("📋 Kono registered user nei.")
-            return
-        
-        msg = "👥 **Registered Users & Status:**\n\n"
-        for u in users:
-            uid = u["user_id"]
-            name = u.get("full_name", "User")
-            bal = u.get("balance", 0.0)
-            sub = "Active" if is_subscribed(uid) else "Expired"
-            status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
-            msg += f"• **{name}** (`{uid}`): `${bal:.4f}` USDT | Sub: {status}\n"
-        
-        await query.message.reply_text(msg, parse_mode="Markdown")
-
-    elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
-        current_status = is_bot_active()
-        new_status = not current_status
-        set_bot_active(new_status)
-        status_text = "🟢 **Bot ON (Active) kora hoyeche!**" if new_status else "🔴 **Bot OFF (Maintenance Mode) kora hoyeche!**"
-        
-        # Update Admin Panel Keyboard Realtime
-        status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
-        admin_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("👥 View All Users", callback_data="admin_view_users")],
-            [InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
-            [InlineKeyboardButton("💵 Set WA Rate", callback_data="admin_rate_start"), InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start")],
-            [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")],
-            [InlineKeyboardButton(f"Bot Status: {status_str}", callback_data="admin_toggle_bot")]
-        ])
-        try:
-            await query.edit_message_reply_markup(reply_markup=admin_kb)
-        except Exception:
-            pass
-        await query.message.reply_text(status_text, parse_mode="Markdown")
 
     elif data.startswith("approve_dep_"):
         parts = data.split("_")
@@ -848,10 +861,13 @@ def main():
     app.add_handler(sub_handler)
     app.add_handler(dep_handler)
     app.add_handler(admin_handler)
+    
+    # GLOBAL CallbackQueryHandler for non-state inline buttons
     app.add_handler(CallbackQueryHandler(handle_callbacks))
+    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with Custom Rate & Broadcast & Bot Switch...")
+    print("VAK-SMS Full Bot Running with Fixed View All Users...")
     app.run_polling(close_loop=False)
 
 
