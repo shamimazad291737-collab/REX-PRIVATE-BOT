@@ -33,9 +33,9 @@ logging.basicConfig(
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "907194603"))  # Admin Telegram ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Admin Telegram ID
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID")  # Render Environment Variable
-BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
+BINANCE_ID = os.getenv("BINANCE_ID", "907194603")
 ADMIN_BKASH = "01858582881"
 MONGODB_URI = os.getenv("MONGODB_URI")
 
@@ -625,24 +625,29 @@ async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("📥 **Apni koto USDT pathaben ta likhe janan (jemon: `5` ba `10`):**")
+    await query.message.reply_text("📥 **Apni koto USDT pathaben ta likhe janan (Minimum: `1` USDT, jemon: `1`, `2.5`, `5`):**")
     return WAITING_AMOUNT
 
 async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amount = float(update.message.text.strip())
+        if amount < 1.0:
+            await update.message.reply_text("❌ Minimum deposit amount **1 USDT**. Doya kore 1 ba tar besi amount likhun.")
+            return WAITING_AMOUNT
+
         context.user_data["dep_amount"] = amount
         
         msg = (
-            f"💰 **Amount:** `{amount}` USDT\n\n"
-            f"👇 **Nicher Binance Pay ID-te dollar pathan:**\n"
-            f"🆔 Binance ID: `{BINANCE_ID}`\n\n"
-            f"Dollar pathanor por apnar **Order ID / TxID** likhe message din:"
+            f"💰 **Deposit Amount:** `{amount}` USDT\n\n"
+            f"👇 **Nicher Binance Pay ID-te Binance app theke Pay/Send Money Korun:**\n"
+            f"🆔 **Binance Pay ID:** `{BINANCE_ID}`\n\n"
+            f"⚠️ **Note:** Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n\n"
+            f"Dollar pathanor por apnar **Order ID / TxID**-ti likhe message din:"
         )
         await update.message.reply_text(msg, parse_mode="Markdown")
         return WAITING_TXID
     except ValueError:
-        await update.message.reply_text("❌ Sothik shongkha likhun (jemon: `5`).")
+        await update.message.reply_text("❌ Sothik shongkha likhun (jemon: `1` ba `5`).")
         return WAITING_AMOUNT
 
 async def deposit_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
