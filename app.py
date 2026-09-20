@@ -7,6 +7,7 @@ from flask import Flask
 from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButton,
+    ReplyKeyboardRemove,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     Update,
@@ -123,7 +124,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
 
     if user_id in banned_users:
-        await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.")
+        await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.", reply_markup=ReplyKeyboardRemove())
         return
 
     # Init User Data
@@ -137,7 +138,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in user_selected_service:
         user_selected_service[user_id] = "wa"
 
-    # Subscription Check
+    # Subscription Check (If not subscribed, remove all bottom features)
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Buy Subscription (30 Tk / 3 Days)", callback_data="buy_sub_start")]
@@ -150,7 +151,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ **Validity:** `3 Days`\n\n"
             f"Nicher button-e click kore subscription kinun:"
         )
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=sub_kb)
+        # ReplyKeyboardRemove() added so bottom keyboard disappears completely
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("👇 **Buy Subscription:**", reply_markup=sub_kb)
         return
 
     exp_str = user_subscriptions[user_id].strftime("%Y-%m-%d %H:%M") if user_id != ADMIN_ID else "Unlimited (Admin)"
@@ -171,7 +174,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = user.id
 
     if user_id in banned_users:
-        await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.")
+        await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.", reply_markup=ReplyKeyboardRemove())
         return
 
     # Check Subscription
@@ -179,7 +182,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sub_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Buy Subscription (30 Tk / 3 Days)", callback_data="buy_sub_start")]
         ])
-        await update.message.reply_text("❌ Apnar subscription expired! Doya kore subscription kinun.", reply_markup=sub_kb)
+        await update.message.reply_text("❌ Apnar subscription expired! Doya kore subscription kinun.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("👇 **Buy Subscription:**", reply_markup=sub_kb)
         return
 
     text = update.message.text.strip()
@@ -373,9 +377,12 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = int(data.split("_")[2])
         user_subscriptions[target_id] = datetime.now() + timedelta(days=3)
         await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **Subscription Approved (3 Days Active)!**")
+        
+        # Unhide features by sending main keyboard on approval
         await context.bot.send_message(
             chat_id=target_id,
-            text="🎉 **Apnar Subscription Approved hoyeche!** 3 Diner jonno bot active kora hoyeche. Start kora jonno /start likhun."
+            text="🎉 **Apnar Subscription Approved hoyeche!** 3 Diner jonno bot-er sob features active kora hoyeche.",
+            reply_markup=get_main_keyboard(target_id)
         )
 
     elif data.startswith("reject_sub_"):
