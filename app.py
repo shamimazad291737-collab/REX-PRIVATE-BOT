@@ -53,7 +53,7 @@ flask_app = Flask("")
 
 @flask_app.route("/")
 def home():
-    return "VAK-SMS Telegram Bot is Active!", 200
+    return "Rex Private Telegram Bot is Active!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
@@ -231,7 +231,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
 
     welcome_msg = (
-        f"👋 **VAK-SMS Bot-e Swagotom!**\n\n"
+        f"👋 **Welcome to Rex Private Bot!**\n\n"
         f"⚙️ **Bortoman Setup:**\n"
         f"• Country: `HONG KONG (HK)`\n"
         f"• Service: `WHATSAPP (WA)`\n"
@@ -403,29 +403,25 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
     if data == "admin_view_users" and user_id == ADMIN_ID:
-        users = list(users_col.find())
-        if not users:
-            await query.message.reply_text("📋 Kono registered user nei.")
-            return
-        
-        msg = "👥 **Registered Users & Status:**\n\n"
-        for u in users:
-            uid = u["user_id"]
-            name = u.get("full_name", "User")
-            bal = u.get("balance", 0.0)
-            sub = "Active" if is_subscribed(uid) else "Expired"
-            status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
+        try:
+            users = list(users_col.find().limit(50))
+            if not users:
+                await query.message.reply_text("📋 Kono registered user nei.")
+                return
             
-            line = f"• **{name}** (`{uid}`): `${bal:.4f}` USDT | Sub: {status}\n"
-            
-            # Message Limit Handled (Telegram 4096 Limit)
-            if len(msg) + len(line) > 4000:
-                await query.message.reply_text(msg, parse_mode="Markdown")
-                msg = ""
-            msg += line
-            
-        if msg:
+            msg = f"👥 **Registered Users (Total Listed: {len(users)}):**\n\n"
+            for u in users:
+                uid = u.get("user_id", "N/A")
+                name = u.get("full_name", "User")
+                bal = u.get("balance", 0.0)
+                sub = "Active" if is_subscribed(uid) else "Expired"
+                status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
+                
+                msg += f"• **{name}** (`{uid}`): `${bal:.4f}` | {status}\n"
+                
             await query.message.reply_text(msg, parse_mode="Markdown")
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error loading users: {str(e)}")
 
     elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
         current_status = is_bot_active()
@@ -867,7 +863,7 @@ def main():
     
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with Fixed View All Users...")
+    print("Rex Private Bot Running...")
     app.run_polling(close_loop=False)
 
 
