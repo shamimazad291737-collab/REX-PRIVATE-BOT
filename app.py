@@ -2,6 +2,7 @@ import logging
 import os
 import threading
 import asyncio
+import re
 from datetime import datetime, timedelta
 from flask import Flask
 from pymongo import MongoClient
@@ -33,6 +34,7 @@ logging.basicConfig(
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Apnar Telegram ID
+OTP_GROUP_ID = os.getenv("OTP_GROUP_ID", "-100XXXXXXXXXX")  # OTP Forward Channel/Group ID
 BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
 ADMIN_BKASH = "01858582881"
 MONGODB_URI = os.getenv("MONGODB_URI")
@@ -57,13 +59,33 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
-# In-Memory Active Orders (Only for ongoing OTP polling runtime)
+# In-Memory Active Orders
 active_orders = {}
 
 # Conversation States
 WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
 SUB_AMOUNT, SUB_TXID, SUB_SCREENSHOT = range(3, 6)
 ADMIN_BAN, ADMIN_UNBAN, ADMIN_ADD_BAL_USER, ADMIN_ADD_BAL_AMT, ADMIN_RATE_SET = range(6, 11)
+
+# Helper Functions: Formatting & Masking
+def mask_number(phone_str: str) -> str:
+    """Masks all digits of a phone number except the country prefix and last 4 digits."""
+    clean_num = re.sub(r"[^\d+]", "", str(phone_str))
+    if len(clean_num) <= 6:
+        return clean_num
+    prefix = clean_num[:4] if clean_num.startswith("+") else clean_num[:3]
+    suffix = clean_num[-4:]
+    masked_part = "*" * (len(clean_num) - len(prefix) - len(suffix))
+    return f"{prefix}{masked_part}{suffix}"
+
+def get_country_flag(country_code: str) -> str:
+    flags = {
+        "hk": "🇭🇰",
+        "us": "🇺🇸",
+        "ru": "🇷🇺",
+        "in": "🇮🇳"
+    }
+    return flags.get(country_code.lower(), "🌐")
 
 # Mongo DB Helper Functions
 def get_user(user_id: int):
@@ -325,6 +347,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             active_orders[id_num] = {
                 "user_id": user_id,
                 "service": service,
+                "country": country,
                 "cost": bot_rate,
                 "phone": phone_num,
                 "msg_id": sent_msg.message_id
@@ -436,6 +459,8 @@ async def process_otp_success(context, id_num: str, otp: str):
     cost = order_info["cost"]
     phone = order_info["phone"]
     msg_id = order_info["msg_id"]
+    service = order_info.get("service", "wa")
+    country = order_info.get("country", "hk")
 
     # Deduct Balance & Increment OTP Count Safely
     users_col.update_one(
@@ -464,6 +489,35 @@ async def process_otp_success(context, id_num: str, otp: str):
         )
     except Exception:
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="Markdown")
+
+    # --- OTP Group/Channel Forwarding ---
+    flag = get_country_flag(country)
+    masked_phone = mask_number(phone)
+    
+    if service.lower() == "wa":
+        service_text = "Your WhatsApp code"
+    elif service.lower() == "tg":
+        service_text = "Your Telegram code"
+    elif service.lower() == "go":
+        service_text = "Your Google code"
+    else:
+        service_text = f"Your {service.upper()} code"
+
+    group_forward_msg = (
+        f"{flag} **Number:** `{masked_phone}`\n"
+        f"🔑 **OTP:** `{otp}`\n"
+        f"💬 **Message:** `{service_text}: {otp}`"
+    )
+
+    if OTP_GROUP_ID and OTP_GROUP_ID != "-100XXXXXXXXXX":
+        try:
+            await context.bot.send_message(
+                chat_id=OTP_GROUP_ID,
+                text=group_forward_msg,
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logging.error(f"Failed to forward OTP to group: {e}")
 
 
 async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str, msg_id: int):
@@ -749,7 +803,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with MongoDB...")
+    print("VAK-SMS Full Bot Running with Group OTP Forwarding & MongoDB...")
     app.run_polling(close_loop=False)
 
 
