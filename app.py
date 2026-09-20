@@ -146,7 +146,29 @@ def get_main_keyboard(user_id):
         keyboard.append([KeyboardButton("⚙️ Admin Panel")])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# VAK-SMS API Functions
+# VAK-SMS API Functions (STRICT $0.07 CHECK)
+def buy_vak_number(service: str, country: str):
+    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&price=0.07"
+    try:
+        res = requests.get(url).json()
+        
+        # If no number at $0.07 tier, directly reject
+        if isinstance(res, dict) and res.get("error") == "noNumber":
+            return {"error": "Stock Out for $0.07 Price Tier!"}
+        
+        # Safety Price Check: Ensure returned price is strictly <= $0.07
+        if isinstance(res, dict) and "price" in res:
+            returned_price = float(res.get("price", 0))
+            if returned_price > 0.07:
+                # Cancel number immediately if API assigns higher rate
+                id_num = str(res.get("idNum"))
+                set_number_status(id_num, "bad")
+                return {"error": f"Higher Price Tier (${returned_price}) Blocked! Only $0.07 Allowed."}
+
+        return res
+    except Exception as e:
+        return {"error": str(e)}
+
 def get_vak_balance():
     url = f"https://vak-sms.com/api/getBalance/?apiKey={VAK_SMS_API_KEY}"
     try:
@@ -154,17 +176,6 @@ def get_vak_balance():
         return res.get("balance", 0.0)
     except Exception:
         return 0.0
-
-def buy_vak_number(service: str, country: str):
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&price=0.07"
-    try:
-        res = requests.get(url).json()
-        if isinstance(res, dict) and res.get("error") == "noNumber":
-            fallback_url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}"
-            res = requests.get(fallback_url).json()
-        return res
-    except Exception as e:
-        return {"error": str(e)}
 
 def fetch_otp_code(id_num: str):
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
@@ -462,7 +473,7 @@ async def process_otp_success(context, id_num: str, otp: str):
     service = order_info.get("service", "wa")
     country = order_info.get("country", "hk")
 
-    # Deduct Balance & Increment OTP Count Safely
+    # Deduct Balance & Increment OTP Count
     users_col.update_one(
         {"user_id": uid},
         {"$inc": {"balance": -cost, "otp_count": 1}}
@@ -803,7 +814,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running with Group OTP Forwarding & MongoDB...")
+    print("VAK-SMS Full Bot Running with Strict $0.07 Price Limit & MongoDB...")
     app.run_polling(close_loop=False)
 
 
