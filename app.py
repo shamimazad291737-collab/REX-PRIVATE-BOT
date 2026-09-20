@@ -33,7 +33,7 @@ logging.basicConfig(
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Admin Telegram ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", "907194603"))  # Admin Telegram ID
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID")  # Render Environment Variable
 BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
 ADMIN_BKASH = "01858582881"
