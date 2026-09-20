@@ -1,8 +1,6 @@
 import os
-import re
-import math
+import asyncio
 import logging
-import requests
 import threading
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -30,7 +28,7 @@ VAK_SMS_API_KEY = os.environ.get("VAK_SMS_API_KEY", "YOUR_VAK_SMS_API_KEY")
 # Conversation states
 SUBMIT_TRX, ENTER_AMOUNT = range(2)
 
-# In-memory storage (Database er poriborte temporary storage)
+# In-memory storage
 user_balances = {}
 used_trx_ids = set()
 
@@ -42,7 +40,6 @@ def home():
     return "VAK-SMS Telegram Bot is Active!", 200
 
 def run_flask():
-    # Render dynamic PORT supply kore, seta na thakle default 8080 use korbe
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
@@ -129,16 +126,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Operation cancelled.")
     return ConversationHandler.END
 
-# ---------------- Main Function ----------------
-def main():
-    # Render/UptimeRobot health check er jonno Flask server-ke background thread-e run kora
-    flask_thread = threading.Thread(target=run_flask, daemon=True)
-    flask_thread.start()
-
-    # Telegram Bot Application Initialize
+# ---------------- Async Main Function Fix ----------------
+async def main_async():
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # Conversation Handler for Deposit
     dep_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(deposit_start, pattern="^deposit$")],
         states={
@@ -148,15 +139,33 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
 
-    # Handlers Add Kora
     app.add_handler(CommandHandler("start", start))
     app.add_handler(dep_handler)
     app.add_handler(CallbackQueryHandler(handle_callbacks))
 
-    print("VAK-SMS Full Bot is running and Flask Web Server active for Render...")
+    # Event loop runtime start kora
+    await app.initialize()
+    await app.start()
+    print("VAK-SMS Full Bot is running...")
     
-    # Telegram Bot Polling (It will block the main thread, which is fine since Flask runs in background)
-    app.run_polling(drop_pending_updates=True)
+    await app.updater.start_polling(drop_pending_updates=True)
+    
+    # Keeps event loop active continuously
+    while True:
+        await asyncio.sleep(3600)
+
+def main():
+    # Background Thread-e Flask Server Launch Kora
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # Create & Run Async Event Loop for MainThread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(main_async())
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == "__main__":
     main()
