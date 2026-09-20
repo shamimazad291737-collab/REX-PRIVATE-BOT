@@ -478,7 +478,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = float(parts[3])
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
         await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **Approved & Balance Added!**")
-        await context.bot.send_message(chat_id=target_id, text=f"🎉 **Apnar `${amount}` USDT deposit shofolbhabe jukto kora hoyeche!**")
+        await context.bot.send_message(chat_id=target_id, text=f"🎉 **Apnar `${amount}` USDT deposit shofolbhabe jukto kora hoyeche!**", reply_markup=get_main_keyboard(target_id))
 
     elif data.startswith("reject_dep_"):
         target_id = int(data.split("_")[2])
@@ -645,8 +645,17 @@ async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT
     return WAITING_AMOUNT
 
 async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    
+    # If user presses any menu button while in deposit flow, exit flow cleanly and process main menu
+    menu_buttons = ["💳 Account Balance", "🛒 Buy Number", "🌐 Set Country", "📱 Set Service", "👤 Profile", "💵 Deposit", "⚙️ Admin Panel"]
+    if text in menu_buttons:
+        context.user_data.clear()
+        await handle_messages(update, context)
+        return ConversationHandler.END
+
     try:
-        amount = float(update.message.text.strip())
+        amount = float(text)
         if amount < 1.0:
             await update.message.reply_text("❌ Minimum deposit amount **1 USDT**. Doya kore 1 ba tar besi amount likhun.")
             return WAITING_AMOUNT
@@ -667,8 +676,14 @@ async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_
         return WAITING_AMOUNT
 
 async def deposit_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txid = update.message.text.strip()
-    context.user_data["dep_txid"] = txid
+    text = update.message.text.strip()
+    menu_buttons = ["💳 Account Balance", "🛒 Buy Number", "🌐 Set Country", "📱 Set Service", "👤 Profile", "💵 Deposit", "⚙️ Admin Panel"]
+    if text in menu_buttons:
+        context.user_data.clear()
+        await handle_messages(update, context)
+        return ConversationHandler.END
+
+    context.user_data["dep_txid"] = text
     await update.message.reply_text("📸 **Ekhon apnar payment-er screenshot (Photo) Pathan:**")
     return WAITING_SCREENSHOT
 
@@ -693,11 +708,17 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
     )
 
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
-    await update.message.reply_text("✅ **Apnar deposit request admin-er kache pathano hoyeche!** Jaachai kore druto balance jukto kora hobe.")
+    await update.message.reply_text(
+        "✅ **Apnar deposit request admin-er kache pathano hoyeche!** Jaachai kore druto balance jukto kora hobe.",
+        reply_markup=get_main_keyboard(user.id)
+    )
+    context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Process batil kora hoyeche.")
+    context.user_data.clear()
+    user_id = update.effective_user.id
+    await update.message.reply_text("❌ Process batil kora hoyeche.", reply_markup=get_main_keyboard(user_id))
     return ConversationHandler.END
 
 # Admin Actions Conversation Handlers
