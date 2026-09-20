@@ -211,7 +211,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚧 **Bot ekhon Maintenance Mode-e ache.** Doya kore kichu khon por chesta korun.", parse_mode="Markdown")
         return
 
-    # Subscription Check
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Buy Subscription (30 Tk / 3 Days)", callback_data="buy_sub_start")]
@@ -256,7 +255,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚧 **Bot ekhon Maintenance Mode-e ache.** Doya kore kichu khon por chesta korun.", parse_mode="Markdown")
         return
 
-    # Check Subscription
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Buy Subscription (30 Tk / 3 Days)", callback_data="buy_sub_start")]
@@ -267,7 +265,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
 
-    # 1. Balance
     if text == "💳 Account Balance":
         bot_bal = u_data.get("balance", 0.0)
         msg = f"💰 **Apnar Bot Balance:** `${bot_bal:.4f}` USDT"
@@ -277,7 +274,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="Markdown")
         return
 
-    # 2. Profile
     if text == "👤 Profile":
         bot_bal = u_data.get("balance", 0.0)
         otp_cnt = u_data.get("otp_count", 0)
@@ -294,7 +290,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_msg, parse_mode="Markdown")
         return
 
-    # 3. Set Country
     if text == "🌐 Set Country":
         country_kb = [
             [KeyboardButton("Country: HK (Hong Kong)")],
@@ -308,7 +303,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Country set: `HONG KONG (HK)`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
-    # 4. Set Service
     if text == "📱 Set Service":
         service_kb = [
             [KeyboardButton("Service: WA (WhatsApp)")],
@@ -326,7 +320,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
         return
 
-    # 5. Buy Number
     if text == "🛒 Buy Number":
         country = "hk"
         service = "wa"
@@ -384,7 +377,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ **Number kena shombhov hoyni:** `{err_msg}`")
         return
 
-    # 6. Admin Panel Command
     if text == "⚙️ Admin Panel" and user_id == ADMIN_ID:
         status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
         admin_kb = InlineKeyboardMarkup([
@@ -397,7 +389,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🛠 **Admin Control Panel:**", reply_markup=admin_kb)
         return
 
-# Inline Callbacks Processing
+# Callback Handler for General & Admin View/Toggle Actions
 async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -447,6 +439,20 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_status = not current_status
         set_bot_active(new_status)
         status_text = "🟢 **Bot ON (Active) kora hoyeche!**" if new_status else "🔴 **Bot OFF (Maintenance Mode) kora hoyeche!**"
+        
+        # Update Admin Panel Keyboard Realtime
+        status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
+        admin_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👥 View All Users", callback_data="admin_view_users")],
+            [InlineKeyboardButton("🚫 Ban User", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
+            [InlineKeyboardButton("💵 Set WA Rate", callback_data="admin_rate_start"), InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start")],
+            [InlineKeyboardButton("📢 Broadcast Message", callback_data="admin_broadcast_start")],
+            [InlineKeyboardButton(f"Bot Status: {status_str}", callback_data="admin_toggle_bot")]
+        ])
+        try:
+            await query.edit_message_reply_markup(reply_markup=admin_kb)
+        except Exception:
+            pass
         await query.message.reply_text(status_text, parse_mode="Markdown")
 
     elif data.startswith("approve_dep_"):
@@ -479,7 +485,6 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_caption(caption=query.message.caption + "\n\n❌ **Subscription Rejected!**")
         await context.bot.send_message(chat_id=target_id, text="❌ Apnar subscription request-ti batil kora hoyeche.")
 
-
 async def process_otp_success(context, id_num: str, otp: str):
     if id_num not in active_orders:
         return
@@ -490,7 +495,6 @@ async def process_otp_success(context, id_num: str, otp: str):
     phone = order_info["phone"]
     msg_id = order_info["msg_id"]
 
-    # Deduct Balance & Increment OTP Count
     users_col.update_one(
         {"user_id": uid},
         {"$inc": {"balance": -cost, "otp_count": 1}}
@@ -518,9 +522,7 @@ async def process_otp_success(context, id_num: str, otp: str):
     except Exception:
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="Markdown")
 
-    # --- OTP Group/Channel Forwarding ---
     masked_phone = mask_number(phone)
-
     group_forward_msg = (
         f"🇭🇰 **Number:** `{masked_phone}`\n"
         f"🔑 **OTP:** `{otp}`\n"
@@ -538,7 +540,6 @@ async def process_otp_success(context, id_num: str, otp: str):
         except Exception as e:
             logging.error(f"Failed to forward OTP to group: {e}")
 
-
 async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str, msg_id: int):
     for _ in range(35):
         await asyncio.sleep(6)
@@ -550,7 +551,6 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
             break
-
 
 # Subscription Conversation Flow
 async def sub_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -612,7 +612,6 @@ async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
     await update.message.reply_text("✅ **Apnar subscription request admin-er kache pathano hoyeche!** Admin approve korlei bot active hoye jaabe.")
     return ConversationHandler.END
-
 
 # Deposit Conversation Flow
 async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -683,7 +682,6 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
 async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Process batil kora hoyeche.")
     return ConversationHandler.END
-
 
 # Admin Actions Conversation Handlers
 async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
