@@ -404,20 +404,28 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_view_users" and user_id == ADMIN_ID:
         try:
-            users = list(users_col.find().limit(50))
-            if not users:
-                await query.message.reply_text("📋 Kono registered user nei.")
+            now = datetime.now()
+            # Filter active subscribers
+            subscribed_users = list(users_col.find({
+                "subscription_expiry": {"$gt": now}
+            }))
+            
+            if not subscribed_users:
+                await query.message.reply_text("📋 Currently, there are no active subscribed users.")
                 return
             
-            msg = f"👥 **Registered Users (Total Listed: {len(users)}):**\n\n"
-            for u in users:
+            msg = f"👥 **Active Subscribed Users ({len(subscribed_users)}):**\n\n"
+            for u in subscribed_users:
                 uid = u.get("user_id", "N/A")
-                name = u.get("full_name", "User")
-                bal = u.get("balance", 0.0)
-                sub = "Active" if is_subscribed(uid) else "Expired"
-                status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
                 
-                msg += f"• **{name}** (`{uid}`): `${bal:.4f}` | {status}\n"
+                # Sanitize name to avoid Markdown syntax errors
+                raw_name = str(u.get("full_name", "User"))
+                safe_name = raw_name.replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+                
+                bal = u.get("balance", 0.0)
+                otp_cnt = u.get("otp_count", 0)
+                
+                msg += f"• **{safe_name}** (`{uid}`)\n  └ 💰 Balance: `${bal:.4f}` USDT | 📩 OTP Rcv: `{otp_cnt}`\n\n"
                 
             await query.message.reply_text(msg, parse_mode="Markdown")
         except Exception as e:
