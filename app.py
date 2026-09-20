@@ -4,6 +4,7 @@ import threading
 import asyncio
 from datetime import datetime, timedelta
 from flask import Flask
+from pymongo import MongoClient
 from telegram import (
     ReplyKeyboardMarkup,
     KeyboardButton,
@@ -34,6 +35,16 @@ VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))  # Apnar Telegram ID
 BINANCE_ID = os.getenv("BINANCE_ID", "123456789 (Binance Pay ID)")
 ADMIN_BKASH = "01858582881"
+MONGODB_URI = os.getenv("MONGODB_URI")
+
+# MongoDB Setup
+if not MONGODB_URI:
+    logging.error("❌ MONGODB_URI Environment Variable missing!")
+client = MongoClient(MONGODB_URI)
+db = client["vaksms_bot_db"]
+
+users_col = db["users"]
+settings_col = db["settings"]
 
 # Flask Web Server
 flask_app = Flask("")
@@ -46,28 +57,58 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
-# In-Memory Database
-user_selected_country = {}
-user_selected_service = {}
+# In-Memory Active Orders (Only for ongoing OTP polling runtime)
 active_orders = {}
-banned_users = set()
-user_balances = {}       # {user_id: balance_amount}
-user_otp_counts = {}     # {user_id: count}
-user_names = {}          # {user_id: name}
-user_subscriptions = {}  # {user_id: expiry_datetime}
-custom_rates = {"wa": 0.10, "tg": 0.15, "go": 0.10, "im": 0.10}
 
 # Conversation States
 WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
 SUB_AMOUNT, SUB_TXID, SUB_SCREENSHOT = range(3, 6)
 ADMIN_BAN, ADMIN_UNBAN, ADMIN_ADD_BAL_USER, ADMIN_ADD_BAL_AMT, ADMIN_RATE_SET = range(6, 11)
 
+# Mongo DB Helper Functions
+def get_user(user_id: int):
+    return users_col.find_one({"user_id": user_id})
+
+def get_or_create_user(user_id: int, full_name: str = "User"):
+    user = users_col.find_one({"user_id": user_id})
+    if not user:
+        user_data = {
+            "user_id": user_id,
+            "full_name": full_name,
+            "balance": 0.0,
+            "otp_count": 0,
+            "selected_country": "hk",
+            "selected_service": "wa",
+            "is_banned": False,
+            "subscription_expiry": None
+        }
+        users_col.insert_one(user_data)
+        return user_data
+    else:
+        users_col.update_one({"user_id": user_id}, {"$set": {"full_name": full_name}})
+        return user
+
+def get_rate(service_code: str):
+    doc = settings_col.find_one({"type": "rates"})
+    if doc and service_code in doc.get("rates", {}):
+        return doc["rates"][service_code]
+    defaults = {"wa": 0.10, "tg": 0.15, "go": 0.10, "im": 0.10}
+    return defaults.get(service_code, 0.10)
+
+def set_rate(service_code: str, rate: float):
+    settings_col.update_one(
+        {"type": "rates"},
+        {"$set": {f"rates.{service_code}": rate}},
+        upsert=True
+    )
+
 # Helper Function: Check Subscription Status
 def is_subscribed(user_id: int) -> bool:
     if user_id == ADMIN_ID:
         return True
-    if user_id in user_subscriptions:
-        expiry = user_subscriptions[user_id]
+    user = get_user(user_id)
+    if user and user.get("subscription_expiry"):
+        expiry = user["subscription_expiry"]
         if datetime.now() < expiry:
             return True
     return False
@@ -117,28 +158,18 @@ def set_number_status(id_num: str, status: str):
     except Exception as e:
         return {"error": str(e)}
 
-
 # Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
 
-    if user_id in banned_users:
+    u_data = get_or_create_user(user_id, user.full_name)
+
+    if u_data.get("is_banned", False):
         await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.", reply_markup=ReplyKeyboardRemove())
         return
 
-    # Init User Data
-    user_names[user_id] = user.full_name
-    if user_id not in user_balances:
-        user_balances[user_id] = 0.0
-    if user_id not in user_otp_counts:
-        user_otp_counts[user_id] = 0
-    if user_id not in user_selected_country:
-        user_selected_country[user_id] = "hk"
-    if user_id not in user_selected_service:
-        user_selected_service[user_id] = "wa"
-
-    # Subscription Check (If not subscribed, remove all bottom features)
+    # Subscription Check
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("💳 Buy Subscription (30 Tk / 3 Days)", callback_data="buy_sub_start")]
@@ -151,19 +182,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"⏳ **Validity:** `3 Days`\n\n"
             f"Nicher button-e click kore subscription kinun:"
         )
-        # ReplyKeyboardRemove() added so bottom keyboard disappears completely
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("👇 **Buy Subscription:**", reply_markup=sub_kb)
         return
 
-    exp_str = user_subscriptions[user_id].strftime("%Y-%m-%d %H:%M") if user_id != ADMIN_ID else "Unlimited (Admin)"
+    exp_time = u_data.get("subscription_expiry")
+    exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
 
     welcome_msg = (
         f"👋 **VAK-SMS Bot-e Swagotom!**\n\n"
         f"⚙️ **Bortoman Setup:**\n"
-        f"• Country: `{user_selected_country[user_id].upper()}`\n"
-        f"• Service: `{user_selected_service[user_id].upper()}`\n"
-        f"• Bot Balance: `${user_balances[user_id]:.2f} USDT`\n"
+        f"• Country: `{u_data.get('selected_country', 'hk').upper()}`\n"
+        f"• Service: `{u_data.get('selected_service', 'wa').upper()}`\n"
+        f"• Bot Balance: `${u_data.get('balance', 0.0):.2f} USDT`\n"
         f"• Subscription Valid Till: `{exp_str}`\n\n"
         f"Nicher menu theke option beche nin:"
     )
@@ -173,7 +204,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
 
-    if user_id in banned_users:
+    u_data = get_or_create_user(user_id, user.full_name)
+
+    if u_data.get("is_banned", False):
         await update.message.reply_text("❌ Apnar account-ti banned kora hoyeche.", reply_markup=ReplyKeyboardRemove())
         return
 
@@ -190,7 +223,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 1. Balance
     if text == "💳 Account Balance":
-        bot_bal = user_balances.get(user_id, 0.0)
+        bot_bal = u_data.get("balance", 0.0)
         msg = f"💰 **Apnar Bot Balance:** `${bot_bal:.2f} USDT`"
         if user_id == ADMIN_ID:
             site_bal = get_vak_balance()
@@ -200,9 +233,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # 2. Profile
     if text == "👤 Profile":
-        bot_bal = user_balances.get(user_id, 0.0)
-        otp_cnt = user_otp_counts.get(user_id, 0)
-        exp_str = user_subscriptions[user_id].strftime("%Y-%m-%d %H:%M") if user_id != ADMIN_ID else "Unlimited (Admin)"
+        bot_bal = u_data.get("balance", 0.0)
+        otp_cnt = u_data.get("otp_count", 0)
+        exp_time = u_data.get("subscription_expiry")
+        exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
         profile_msg = (
             f"👤 **Apnar Profile Info:**\n\n"
             f"🆔 **User ID:** `{user_id}`\n"
@@ -226,7 +260,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text.startswith("Country:"):
         code = text.split(":")[1].split("(")[0].strip().lower()
-        user_selected_country[user_id] = code
+        users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": code}})
         await update.message.reply_text(f"✅ Country set hoyeche: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
@@ -242,7 +276,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text.startswith("Service:"):
         code = text.split(":")[1].split("(")[0].strip().lower()
-        user_selected_service[user_id] = code
+        users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": code}})
         await update.message.reply_text(f"✅ Service set hoyeche: `{code.upper()}`", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
@@ -250,12 +284,12 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
         return
 
-    # 5. Buy Number (Holding Balance System)
+    # 5. Buy Number
     if text == "🛒 Buy Number":
-        country = user_selected_country.get(user_id, "hk")
-        service = user_selected_service.get(user_id, "wa")
-        bot_rate = custom_rates.get(service, 0.10)
-        user_bal = user_balances.get(user_id, 0.0)
+        country = u_data.get("selected_country", "hk")
+        service = u_data.get("selected_service", "wa")
+        bot_rate = get_rate(service)
+        user_bal = u_data.get("balance", 0.0)
 
         if user_bal < bot_rate:
             await update.message.reply_text(
@@ -317,7 +351,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🛠 **Admin Control Panel:**", reply_markup=admin_kb)
         return
 
-
 # Inline Callbacks Processing
 async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -347,15 +380,18 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.message.reply_text("❌ Ei order-ti ar active nei ba already OTP ashe geche.")
 
     elif data == "admin_view_users" and user_id == ADMIN_ID:
-        if not user_names:
+        users = list(users_col.find())
+        if not users:
             await query.message.reply_text("📋 Kono registered user nei.")
             return
         
         msg = "👥 **Registered Users & Status:**\n\n"
-        for uid, name in user_names.items():
-            bal = user_balances.get(uid, 0.0)
+        for u in users:
+            uid = u["user_id"]
+            name = u.get("full_name", "User")
+            bal = u.get("balance", 0.0)
             sub = "Active" if is_subscribed(uid) else "Expired"
-            status = "🚫 (Banned)" if uid in banned_users else f"✅ ({sub})"
+            status = "🚫 (Banned)" if u.get("is_banned", False) else f"✅ ({sub})"
             msg += f"• **{name}** (`{uid}`): `${bal:.2f}` USDT | Sub: {status}\n"
         
         await query.message.reply_text(msg, parse_mode="Markdown")
@@ -364,7 +400,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parts = data.split("_")
         target_id = int(parts[2])
         amount = float(parts[3])
-        user_balances[target_id] = user_balances.get(target_id, 0.0) + amount
+        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
         await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **Approved & Balance Added!**")
         await context.bot.send_message(chat_id=target_id, text=f"🎉 **Apnar `${amount}` USDT deposit shofolbhabe jukto kora hoyeche!**")
 
@@ -375,10 +411,10 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("approve_sub_"):
         target_id = int(data.split("_")[2])
-        user_subscriptions[target_id] = datetime.now() + timedelta(days=3)
+        expiry_date = datetime.now() + timedelta(days=3)
+        users_col.update_one({"user_id": target_id}, {"$set": {"subscription_expiry": expiry_date}})
         await query.edit_message_caption(caption=query.message.caption + "\n\n✅ **Subscription Approved (3 Days Active)!**")
         
-        # Unhide features by sending main keyboard on approval
         await context.bot.send_message(
             chat_id=target_id,
             text="🎉 **Apnar Subscription Approved hoyeche!** 3 Diner jonno bot-er sob features active kora hoyeche.",
@@ -401,8 +437,14 @@ async def process_otp_success(context, id_num: str, otp: str):
     phone = order_info["phone"]
     msg_id = order_info["msg_id"]
 
-    user_balances[uid] = max(0.0, user_balances.get(uid, 0.0) - cost)
-    user_otp_counts[uid] = user_otp_counts.get(uid, 0) + 1
+    # Deduct Balance & Increment OTP Count Safely
+    users_col.update_one(
+        {"user_id": uid},
+        {"$inc": {"balance": -cost, "otp_count": 1}}
+    )
+    
+    updated_user = get_user(uid)
+    rem_bal = updated_user.get("balance", 0.0) if updated_user else 0.0
     set_number_status(id_num, "end")
 
     success_text = (
@@ -410,7 +452,7 @@ async def process_otp_success(context, id_num: str, otp: str):
         f"📱 **Number:** `{phone}`\n"
         f"🔑 **OTP Code:** `{otp}`\n\n"
         f"💵 **Balance Deducted:** `${cost:.2f}` USDT\n"
-        f"💰 **Remaining Balance:** `${user_balances[uid]:.2f}` USDT"
+        f"💰 **Remaining Balance:** `${rem_bal:.2f}` USDT"
     )
 
     try:
@@ -575,7 +617,7 @@ async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_ban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
-        banned_users.add(uid)
+        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": True}})
         await update.message.reply_text(f"✅ User `{uid}`-ke banned kora hoyeche.", parse_mode="Markdown")
     except ValueError:
         await update.message.reply_text("❌ Invalid User ID.")
@@ -590,7 +632,7 @@ async def admin_unban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_unban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
-        banned_users.discard(uid)
+        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": False}})
         await update.message.reply_text(f"✅ User `{uid}`-ke unban kora hoyeche.", parse_mode="Markdown")
     except ValueError:
         await update.message.reply_text("❌ Invalid User ID.")
@@ -616,8 +658,12 @@ async def admin_add_bal_amt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amt = float(update.message.text.strip())
         uid = context.user_data.get("target_add_uid")
-        user_balances[uid] = user_balances.get(uid, 0.0) + amt
-        await update.message.reply_text(f"✅ Successfully added `${amt}` USDT to User `{uid}`. Notun Balance: `${user_balances[uid]:.2f}` USDT", parse_mode="Markdown")
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}})
+        
+        u = get_user(uid)
+        new_bal = u.get("balance", 0.0) if u else amt
+        
+        await update.message.reply_text(f"✅ Successfully added `${amt}` USDT to User `{uid}`. Notun Balance: `${new_bal:.2f}` USDT", parse_mode="Markdown")
         await context.bot.send_message(chat_id=uid, text=f"🎉 **Admin apnar account-e `${amt}` USDT balance add koreche!**")
     except ValueError:
         await update.message.reply_text("❌ Invalid Amount.")
@@ -632,7 +678,7 @@ async def admin_rate_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def admin_rate_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         rate = float(update.message.text.strip())
-        custom_rates["wa"] = rate
+        set_rate("wa", rate)
         await update.message.reply_text(f"✅ WhatsApp Bot Rate update kora hoyeche: `${rate:.2f}` USDT")
     except ValueError:
         await update.message.reply_text("❌ Invalid Rate.")
@@ -703,7 +749,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    print("VAK-SMS Full Bot Running...")
+    print("VAK-SMS Full Bot Running with MongoDB...")
     app.run_polling(close_loop=False)
 
 
