@@ -803,31 +803,76 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
 
 
 def main():
-    # ১. Flask Web Server চালু রাখা (Render Port Active রাখার জন্য)
-    import os
-    port = int(os.environ.get("PORT", 10000))
-    flask_thread = threading.Thread(target=lambda: flask_app.run(host="0.0.0.0", port=port, use_reloader=False), daemon=True)
-    flask_thread.start()
+    threading.Thread(target=run_flask, daemon=True).start()
 
-    # ২. Telegram Bot application তৈরি
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # ৩. সব Handlers সঠিকভাবে যুক্ত করা
+    # Subscription Flow Handler
+    sub_handler = ConversationHandler(
+        entry_points=[CallbackQueryHandler(sub_start, pattern="^buy_sub_start$")],
+        states={
+            SUB_AMOUNT: [
+                CallbackQueryHandler(sub_bkash_selected, pattern="^pay_bkash_sub$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, sub_amount_received)
+            ],
+            SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
+            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_flow)]
+    )
+
+    # Deposit Flow Handler
+    dep_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^💵 Deposit$"), deposit_start)],
+        states={
+            WAITING_AMOUNT: [
+                CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)
+            ],
+            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
+            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel_flow)]
+    )
+
+    # Admin Conversation Handler
+    admin_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(admin_ban_start, pattern="^admin_ban_start$"),
+            CallbackQueryHandler(admin_unban_start, pattern="^admin_unban_start$"),
+            CallbackQueryHandler(admin_add_bal_start, pattern="^admin_add_bal_start$"),
+            CallbackQueryHandler(admin_rate_start, pattern="^admin_rate_start$"),
+            CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$"),
+        ],
+        states={
+            ADMIN_BAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_process)],
+            ADMIN_UNBAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_process)],
+            ADMIN_ADD_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_user)],
+            ADMIN_ADD_BAL_AMT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_amt)],
+            ADMIN_RATE_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_process)],
+            ADMIN_BROADCAST: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_broadcast_process)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_flow)]
+    )
+
     app.add_handler(CommandHandler("start", start))
-    
-    # Conversation Handlers (Subscription, Deposit & Admin Panels)
     app.add_handler(sub_handler)
     app.add_handler(dep_handler)
     app.add_handler(admin_handler)
-
-    # General Callback & Message Handlers
+    
+    # GLOBAL CallbackQueryHandler for non-state inline buttons
     app.add_handler(CallbackQueryHandler(handle_callbacks))
+    
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
     print("Rex Private Bot Running...")
-
-    # ৪. Polling চালু করা
-    app.run_polling(drop_pending_updates=True)
+    app.run_polling(close_loop=False)
 
 
 if __name__ == "__main__":
