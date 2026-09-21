@@ -158,12 +158,12 @@ def set_number_status(id_num: str, status: str):
         return {"error": str(e)}
 
 def buy_vak_number(service: str = "wa", country: str = "hk"):
-    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service=wa&country=hk&maxPrice=0.07"
+    url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice=0.07"
     try:
         res = requests.get(url).json()
         
         if isinstance(res, dict) and res.get("error") == "noNumber":
-            return {"error": "Stock Out for $0.07 Price Tier!"}
+            return {"error": "Stock Out for $0.075 Price Tier!"}
             
         if isinstance(res, dict) and "tel" in res and "idNum" in res:
             assigned_price = res.get("price")
@@ -173,7 +173,7 @@ def buy_vak_number(service: str = "wa", country: str = "hk"):
                     if price_val > 0.07:
                         id_num = str(res["idNum"])
                         set_number_status(id_num, "bad")
-                        return {"error": f"Stock Out! Price (${price_val}) exceeded $0.07 limit."}
+                        return {"error": f"Stock Out! Price (${price_val}) exceeded $0.075 limit."}
                 except ValueError:
                     pass
 
@@ -484,8 +484,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = int(data.split("_")[2])
         await query.edit_message_caption(caption=query.message.caption + "\n\n❌ **Deposit Rejected!**")
         await context.bot.send_message(chat_id=target_id, text="❌ Apnar deposit request-ti batil kora hoyeche.")
-
-    elif data.startswith("approve_sub_"):
+elif data.startswith("approve_sub_"):
         target_id = int(data.split("_")[2])
         expiry_date = datetime.now() + timedelta(days=3)
         users_col.update_one({"user_id": target_id}, {"$set": {"subscription_expiry": expiry_date}})
