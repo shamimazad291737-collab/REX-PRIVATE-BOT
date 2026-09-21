@@ -163,7 +163,7 @@ def buy_vak_number(service: str = "wa", country: str = "hk"):
         res = requests.get(url).json()
         
         if isinstance(res, dict) and res.get("error") == "noNumber":
-            return {"error": "Stock Out for $0.07 Price Tier!"}
+            return {"error": "Stock Out for $0.075 Price Tier!"}
             
         if isinstance(res, dict) and "tel" in res and "idNum" in res:
             assigned_price = res.get("price")
@@ -173,7 +173,7 @@ def buy_vak_number(service: str = "wa", country: str = "hk"):
                     if price_val > 0.07:
                         id_num = str(res["idNum"])
                         set_number_status(id_num, "bad")
-                        return {"error": f"Stock Out! Price (${price_val}) exceeded $0.07 limit."}
+                        return {"error": f"Stock Out! Price (${price_val}) exceeded $0.075 limit."}
                 except ValueError:
                     pass
 
