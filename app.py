@@ -64,7 +64,7 @@ active_orders = {}
 
 # Conversation States
 WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
-SUB_PLAN, SUB_TXID, SUB_SCREENSHOT = range(3, 6)
+SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 (
     ADMIN_BAN,
     ADMIN_UNBAN,
@@ -76,7 +76,7 @@ SUB_PLAN, SUB_TXID, SUB_SCREENSHOT = range(3, 6)
     ADMIN_RATE_TG_HK_SET,
     ADMIN_RATE_TG_CL_SET,
     ADMIN_BROADCAST,
-) = range(6, 16)
+) = range(7, 17)
 
 # Helper Functions
 def get_country_flag(country_code: str) -> str:
@@ -107,11 +107,12 @@ def get_or_create_user(user_id: int, full_name: str = "User"):
             "full_name": full_name,
             "balance": 0.0,
             "otp_count": 0,
-            "selected_country": "hk",  # Default Hong Kong (hk)
-            "selected_service": "tg",  # Default Telegram (tg)
+            "selected_country": "hk",
+            "selected_service": "tg",
             "is_banned": False,
             "subscription_expiry": None,
-            "sub_days": 0
+            "sub_days": 0,
+            "sub_method": "bkash"
         }
         users_col.insert_one(user_data)
         return user_data
@@ -240,20 +241,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💳 5 Days (50 Tk)", callback_data="buy_sub_5")],
-            [InlineKeyboardButton("💳 7 Days (70 Tk)", callback_data="buy_sub_7")]
+            [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
+            [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
         msg = (
             f"👋 **Hello {user.full_name}!**\n\n"
             f"❌ 𝚈𝙾𝚄 𝙳𝙾𝙽'𝚃 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽 𝚃𝙷𝙴 𝙱𝙾𝚃!\n"
             f"ʙᴏᴛ ʙᴇʙᴏʜᴀʀ ᴋᴏʀᴛᴇ ᴄʜᴀɪʟᴇ sᴜʙsᴄʀɪᴘᴛɪᴏɴ ɴɪᴛᴇ ʜᴏʙᴇ.\n\n"
-            f"📌 **𝗣𝗥𝗜𝗖𝗘 & 𝗩𝗔𝗟𝗜𝗗𝗜𝗧𝗬:**\n"
-            f"• `5 Days` = **50 Tk**\n"
-            f"• `7 Days` = **70 Tk**\n\n"
+            f"📌 **𝗣𝗥𝗜𝗖𝗘 & 𝗩𝗔𝗟𝗜𝗗𝗜𝗧𝗬 (Rate: 125 Tk/$) :**\n"
+            f"• `5 Days` = **50 Tk** (or `0.40 USDT`)\n"
+            f"• `7 Days` = **70 Tk** (or `0.56 USDT`)\n\n"
             f"ɴɪᴄʜᴇʀ ʙᴜᴛᴛᴏɴ ᴛʜᴇᴋᴇ ᴄʟɪᴄᴋ ᴋᴏʀᴇ sᴜʙsᴄ𝚁𝙸𝙿𝚃𝙸𝙾𝙽 ᴋɪɴᴜɴ:"
         )
         await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-        await update.message.reply_text("👇 **𝙱𝚄𝚈 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽:**", reply_markup=sub_kb)
+        await update.message.reply_text("👇 **𝙱𝚄𝚈 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾Ն:**", reply_markup=sub_kb)
         return
 
     exp_time = u_data.get("subscription_expiry")
@@ -291,8 +292,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("💳 5 Days (50 Tk)", callback_data="buy_sub_5")],
-            [InlineKeyboardButton("💳 7 Days (70 Tk)", callback_data="buy_sub_7")]
+            [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
+            [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
         await update.message.reply_text("❌ 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽 𝙴𝚇𝙿𝙸𝚁𝙴𝚂! 𝙱𝚄𝚈 𝙽𝙴𝚆 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽.", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("👇 **𝙱𝚄𝚈 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽:**", reply_markup=sub_kb)
@@ -651,12 +652,13 @@ async def sub_start_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 5}})
     
-    bkash_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷", callback_data="pay_bkash_sub")],
+    pay_methods_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷 (50 Tk)", callback_data="pay_method_bkash")],
+        [InlineKeyboardButton("💛 Binance Pay (0.40 USDT)", callback_data="pay_method_binance")],
         [InlineKeyboardButton("❌ 𝙲𝙰𝙽𝙲𝙴𝙻", callback_data="cancel_flow_cb")]
     ])
-    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 5 Days - 50 Tk):**", reply_markup=bkash_kb)
-    return SUB_PLAN
+    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 5 Days - 50 Tk / 0.40 USDT):**", reply_markup=pay_methods_kb)
+    return SUB_METHOD
 
 async def sub_start_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -664,37 +666,56 @@ async def sub_start_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 7}})
     
-    bkash_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷", callback_data="pay_bkash_sub")],
+    pay_methods_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷 (70 Tk)", callback_data="pay_method_bkash")],
+        [InlineKeyboardButton("💛 Binance Pay (0.56 USDT)", callback_data="pay_method_binance")],
         [InlineKeyboardButton("❌ 𝙲𝙰𝙽𝙲𝙴𝙻", callback_data="cancel_flow_cb")]
     ])
-    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 7 Days - 70 Tk):**", reply_markup=bkash_kb)
-    return SUB_PLAN
+    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 7 Days - 70 Tk / 0.56 USDT):**", reply_markup=pay_methods_kb)
+    return SUB_METHOD
 
-async def sub_bkash_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def sub_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
+    data = query.data
+    
     user_doc = users_col.find_one({"user_id": user_id})
     days = user_doc.get("sub_days", 5) if user_doc else 5
-    price = 50 if days == 5 else 70
     
-    msg = (
-        f"💰 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
-        f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price}` Tk\n\n"
-        f"👇 **𝚂𝙴𝙽𝙳 𝙱𝙺𝙰𝚂𝙷 𝙿𝙴𝚁𝚂𝙾𝙽𝙰𝙻 𝙽𝚄𝙼𝙱𝙴𝚁:**\n"
-        f"📱 𝙱𝙺𝙰𝚂𝙷 𝙽𝚄𝙼𝙱𝙴𝚁: `{ADMIN_BKASH}`\n\n"
-        f"𝚃𝙰𝙺𝙰 𝙳𝙴𝙰 𝚂𝙴𝚂𝙴 𝚃𝚁𝚇 𝙸𝙳 **TrxID**-𝚃𝙸 𝙻𝙸𝙺𝙷𝙴 𝙿𝙰𝚃𝙷𝙰𝙽:"
-    )
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
-    return SUB_TXID
+    
+    if data == "pay_method_bkash":
+        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "bkash"}})
+        price = 50 if days == 5 else 70
+        msg = (
+            f"💰 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
+            f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price} Tk`\n\n"
+            f"👇 **𝚂𝙴𝙽𝙳 𝙱𝙺𝙰𝚂𝙷 𝙿𝙴𝚁𝚂𝙾𝙽𝙰𝙻 𝙽𝚄𝙼𝙱𝙴𝚁:**\n"
+            f"📱 𝙱𝙺𝙰𝚂𝙷 𝙽𝚄𝙼𝙱𝙴𝚁: `{ADMIN_BKASH}`\n\n"
+            f"𝚃𝙰𝙺𝙰 𝙳𝙴𝙰 𝚂𝙴𝚂𝙴 **TrxID**-𝚃𝙸 𝙻𝙸𝙺𝙷𝙴 𝙿𝙰𝚃𝙷𝙰𝙽:"
+        )
+        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
+        return SUB_TXID
+        
+    elif data == "pay_method_binance":
+        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "binance"}})
+        usdt_amt = 0.40 if days == 5 else 0.56
+        msg = (
+            f"💰 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
+            f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{usdt_amt}` USDT (Rate: 125 Tk/$)\n\n"
+            f"👇 **𝚂𝙴𝙽𝙳 𝙱𝙸𝙽𝙰𝙽𝙲𝙴 𝙿𝙰𝚈 𝙸𝙳:**\n"
+            f"🆔 𝙱𝙸𝙽𝙰𝙽𝙲𝙴 𝙿𝙰𝚈 𝙸𝙳: `{BINANCE_ID}`\n\n"
+            f"ডলার সেন্ড করার পর আপনার **Order ID / TxID**-টি লিখে পাঠান:"
+        )
+        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
+        return SUB_TXID
 
 async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txid = update.message.text.strip()
     context.user_data["sub_txid"] = txid
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await update.message.reply_text("📸 **𝙱2𝙰𝚂𝙷 𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃(Photo) 𝙳𝙸𝙽:**" if False else "📸 **𝙱𝙺𝙰𝚂𝙷 𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃(Photo) 𝙳𝙸𝙽:**", reply_markup=cancel_kb)
+    await update.message.reply_text("📸 **පAYMENT-এর 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃 (Photo) 𝙳𝙸𝙽:**", reply_markup=cancel_kb)
     return SUB_SCREENSHOT
 
 async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -703,7 +724,12 @@ async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_
     txid = context.user_data.get("sub_txid")
     user_doc = users_col.find_one({"user_id": user.id})
     days = user_doc.get("sub_days", 5) if user_doc else 5
-    price = 50 if days == 5 else 70
+    method = user_doc.get("sub_method", "bkash").upper()
+    
+    if method == "BKASH":
+        price_str = f"{50 if days == 5 else 70} Tk"
+    else:
+        price_str = f"{0.40 if days == 5 else 0.56} USDT"
 
     admin_kb = InlineKeyboardMarkup([
         [
@@ -715,9 +741,10 @@ async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_
     caption = (
         f"🔔 **𝙽𝙴𝚆 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽 𝚁𝙴𝙹𝚄𝙴𝚂𝚃!**\n\n"
         f"👤 **𝚄𝚂𝙴𝚁:** {user.full_name} (`{user.id}`)\n"
+        f"💳 **𝙼𝙴𝚃𝙷𝙾𝙳:** `{method}`\n"
         f"📅 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
-        f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price} Tk`\n"
-        f"🧾 **𝚃𝚁𝚇𝙸𝙳:** `{txid}`"
+        f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price_str}`\n"
+        f"🧾 **𝚃𝚁𝚇𝙸𝙳 / 𝙾𝚁𝙳𝙴𝚁 𝙸𝙳:** `{txid}`"
     )
 
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
@@ -889,7 +916,6 @@ async def admin_zero_bal_process(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
     return ConversationHandler.END
 
-# ADMIN RATE SETTERS FOR HK & CHILE
 async def admin_rate_wa_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -950,7 +976,6 @@ async def admin_rate_tg_cl_process(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
-# ADMIN BROADCAST HANDLERS (UPDATED TO PRESERVE PREMIUM EMOJI / ENTITIES)
 async def admin_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1011,8 +1036,8 @@ async def run_bot():
             CallbackQueryHandler(sub_start_7, pattern="^buy_sub_7$")
         ],
         states={
-            SUB_PLAN: [
-                CallbackQueryHandler(sub_bkash_selected, pattern="^pay_bkash_sub$")
+            SUB_METHOD: [
+                CallbackQueryHandler(sub_method_selected, pattern="^pay_method_(bkash|binance)$")
             ],
             SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
             SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)]
