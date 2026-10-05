@@ -1047,8 +1047,10 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
     await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-# Async Main Runner
-async def run_bot():
+# Main Runner (Updated to fix Weak Reference / TypeError)
+def main():
+    threading.Thread(target=run_flask, daemon=True).start()
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     sub_conv = ConversationHandler(
@@ -1151,22 +1153,8 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    async with app:
-        await app.start()
-        await app.updater.start_polling()
-        logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
-        await asyncio.Event().wait()
-
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
+    logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
+    app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
