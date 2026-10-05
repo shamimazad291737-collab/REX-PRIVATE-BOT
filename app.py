@@ -32,7 +32,7 @@ logging.basicConfig(
 
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "ac5d0a3b0500416cb06a2bfefc1421e1")
+VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "82682889002a460a9f274b4e4cc5043e")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "123456789"))
 OTP_GROUP_ID = os.getenv("OTP_GROUP_ID")
 BINANCE_ID = os.getenv("BINANCE_ID", "907194603")
