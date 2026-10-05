@@ -293,7 +293,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text("❌ 𝚈𝙾𝚄𝚁 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙷𝙰𝚂 𝙱𝙴𝙴𝙽 𝙱𝙰𝙽 𝙱𝙸 𝙰𝙳𝙼𝙸𝙽.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("❌ 𝚈𝙾𝚄𝚁 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙷𝙰𝚂 𝙱𝙴𝙴𝙽 𝙱𝙰𝙽 𝙱𝚈 𝙰𝙳𝙼𝙸𝙽.", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
@@ -818,222 +818,225 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
     ])
 
     caption = (
-        f"🔔 **NEW DEPOSIT REQUEST!**\n\n"
+        f"📥 **Notun Deposit Request!**\n\n"
         f"👤 **User:** {user.full_name} (`{user.id}`)\n"
-        f"💰 **Amount:** `{amount}` USDT\n"
+        f"💰 **Amount:** `${amount}` USDT\n"
         f"🧾 **TxID:** `{txid}`"
     )
 
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
-    await update.message.reply_text("✅ **Apnar deposit request admin-er kache pathano hoyeche!** Verification seshe balance add kora hobe.")
+    await update.message.reply_text("✅ **Apnar deposit request admin-er kache pathano hoyeche!** Jaachai kore druto balance jukto kora hobe.")
     return ConversationHandler.END
 
 async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.callback_query:
-        await update.callback_query.answer()
-        await update.callback_query.message.reply_text("❌ Operation Canceled.", reply_markup=get_main_keyboard(update.effective_user.id))
-    else:
-        await update.message.reply_text("❌ Operation Canceled.", reply_markup=get_main_keyboard(update.effective_user.id))
+        query = update.callback_query
+        await query.answer()
+        await query.message.edit_text("❌ Process batil kora hoyeche.")
+    elif update.message:
+        await update.message.reply_text("❌ Process batil kora hoyeche.")
     return ConversationHandler.END
 
-# Admin State Handlers
 async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("🚫 **Enter User ID to BAN:**", reply_markup=cancel_kb)
+    await query.message.reply_text("🚫 **Banned korte chawa User ID-ti likhe pathan:**")
     return ADMIN_BAN
 
-async def admin_ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_ban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        target_id = int(update.message.text.strip())
-        users_col.update_one({"user_id": target_id}, {"$set": {"is_banned": True}})
-        await update.message.reply_text(f"✅ User `{target_id}` has been **BANNED**.", parse_mode="Markdown")
+        uid = int(update.message.text.strip())
+        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": True}})
+        await update.message.reply_text(f"✅ User `{uid}`-ke banned kora hoyeche.", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID!")
+        await update.message.reply_text("❌ Invalid User ID.")
     return ConversationHandler.END
 
 async def admin_unban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("✅ **Enter User ID to UNBAN:**", reply_markup=cancel_kb)
+    await query.message.reply_text("✅ **Unban korte chawa User ID-ti likhe pathan:**")
     return ADMIN_UNBAN
 
-async def admin_unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_unban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        target_id = int(update.message.text.strip())
-        users_col.update_one({"user_id": target_id}, {"$set": {"is_banned": False}})
-        await update.message.reply_text(f"✅ User `{target_id}` has been **UNBANNED**.", parse_mode="Markdown")
+        uid = int(update.message.text.strip())
+        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": False}})
+        await update.message.reply_text(f"✅ User `{uid}`-ke unban kora hoyeche.", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID!")
+        await update.message.reply_text("❌ Invalid User ID.")
     return ConversationHandler.END
 
 async def admin_add_bal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("➕ **Enter User ID to ADD BALANCE:**", reply_markup=cancel_kb)
+    await query.message.reply_text("➕ **Balance add korte chawa User ID-ti pathan:**")
     return ADMIN_ADD_BAL_USER
 
-async def admin_add_bal_get_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_add_bal_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        target_id = int(update.message.text.strip())
-        context.user_data["admin_target_user"] = target_id
-        cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-        await update.message.reply_text(f"💵 **Enter Amount to add for user `{target_id}`:**", parse_mode="Markdown", reply_markup=cancel_kb)
+        uid = int(update.message.text.strip())
+        context.user_data["target_add_uid"] = uid
+        await update.message.reply_text(f"💰 **User `{uid}`-er jonno koto USDT balance add korben ta likhun:**", parse_mode="Markdown")
         return ADMIN_ADD_BAL_AMT
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID!")
+        await update.message.reply_text("❌ Invalid User ID.")
         return ConversationHandler.END
 
-async def admin_add_bal_get_amt(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_add_bal_amt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amt = float(update.message.text.strip())
-        target_id = context.user_data.get("admin_target_user")
-        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amt}})
-        await update.message.reply_text(f"✅ Added `${amt}` USDT to user `{target_id}`.", parse_mode="Markdown")
-        await context.bot.send_message(chat_id=target_id, text=f"🎉 Admin added `${amt}` USDT to your balance!")
+        uid = context.user_data.get("target_add_uid")
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}})
+        
+        u = get_user(uid)
+        new_bal = u.get("balance", 0.0) if u else amt
+        
+        await update.message.reply_text(f"✅ Successfully added `${amt}` USDT to User `{uid}`. Notun Balance: `${new_bal:.4f}` USDT", parse_mode="Markdown")
+        await context.bot.send_message(chat_id=uid, text=f"🎉 **Admin apnar account-e `${amt}` USDT balance add koreche!**")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Amount!")
+        await update.message.reply_text("❌ Invalid Amount.")
     return ConversationHandler.END
 
 async def admin_zero_bal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("🔄 **Enter User ID to ZERO BALANCE:**", reply_markup=cancel_kb)
+    await query.message.reply_text("🔄 **Je user-er balance 0 (zero) korte chan, tar User ID-ti pathan:**", parse_mode="Markdown")
     return ADMIN_ZERO_BAL_USER
 
-async def admin_zero_bal_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_zero_bal_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        target_id = int(update.message.text.strip())
-        users_col.update_one({"user_id": target_id}, {"$set": {"balance": 0.0}})
-        await update.message.reply_text(f"✅ Balance zeroed for user `{target_id}`.", parse_mode="Markdown")
+        uid = int(update.message.text.strip())
+        result = users_col.update_one({"user_id": uid}, {"$set": {"balance": 0.0}})
+        
+        if result.matched_count > 0:
+            await update.message.reply_text(f"✅ Successfully User `{uid}`-er balance **0 USDT** kora hoyeche.", parse_mode="Markdown")
+            try:
+                await context.bot.send_message(chat_id=uid, text="⚠️ **Admin apnar account-er balance 0 kore diyeche.**")
+            except Exception:
+                pass
+        else:
+            await update.message.reply_text(f"❌ Database-e `{uid}` ID-er kono user pawa jayni.")
+            
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID!")
+        await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
     return ConversationHandler.END
 
+# ADMIN RATE SETTERS FOR HK & CHILE
 async def admin_rate_wa_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("💵 **Enter new rate for WhatsApp (HK) in USDT:**", reply_markup=cancel_kb)
+    await query.message.reply_text("💵 **Hong Kong (HK) WhatsApp (WA)-er notun Bot Rate USDT-te likhun (jemon: `0.075` ba `0.10`):**")
     return ADMIN_RATE_WA_HK_SET
 
-async def admin_rate_wa_hk_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_wa_hk_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         rate = float(update.message.text.strip())
         set_rate("wa", "hk", rate)
-        await update.message.reply_text(f"✅ Rate for WA (HK) set to `${rate}` USDT.")
+        await update.message.reply_text(f"✅ Hong Kong WA Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate!")
+        await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
 async def admin_rate_wa_cl_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("💵 **Enter new rate for WhatsApp (CL) in USDT:**", reply_markup=cancel_kb)
+    await query.message.reply_text("💵 **Chile (CL) WhatsApp (WA)-er notun Bot Rate USDT-te likhun (jemon: `0.087` ba `0.10`):**")
     return ADMIN_RATE_WA_CL_SET
 
-async def admin_rate_wa_cl_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_wa_cl_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         rate = float(update.message.text.strip())
         set_rate("wa", "cl", rate)
-        await update.message.reply_text(f"✅ Rate for WA (CL) set to `${rate}` USDT.")
+        await update.message.reply_text(f"✅ Chile WA Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate!")
+        await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
 async def admin_rate_tg_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("💵 **Enter new rate for Telegram (HK) in USDT:**", reply_markup=cancel_kb)
+    await query.message.reply_text("💵 **Hong Kong (HK) Telegram (TG)-er notun Bot Rate USDT-te likhun (jemon: `0.10` ba `0.12`):**")
     return ADMIN_RATE_TG_HK_SET
 
-async def admin_rate_tg_hk_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_tg_hk_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         rate = float(update.message.text.strip())
         set_rate("tg", "hk", rate)
-        await update.message.reply_text(f"✅ Rate for TG (HK) set to `${rate}` USDT.")
+        await update.message.reply_text(f"✅ Hong Kong TG Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate!")
+        await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
 async def admin_rate_tg_cl_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("💵 **Enter new rate for Telegram (CL) in USDT:**", reply_markup=cancel_kb)
+    await query.message.reply_text("💵 **Chile (CL) Telegram (TG)-er notun Bot Rate USDT-te likhun (jemon: `0.10` ba `0.12`):**")
     return ADMIN_RATE_TG_CL_SET
 
-async def admin_rate_tg_cl_set(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_tg_cl_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         rate = float(update.message.text.strip())
         set_rate("tg", "cl", rate)
-        await update.message.reply_text(f"✅ Rate for TG (CL) set to `${rate}` USDT.")
+        await update.message.reply_text(f"✅ Chile TG Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate!")
+        await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
+# ADMIN BROADCAST HANDLERS
 async def admin_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("📢 **Send broadcast message text or photo:**", reply_markup=cancel_kb)
+    await query.message.reply_text("📢 **Sobai ke broadcast korte chawa message-ti (Text/Photo) ekhane pathan:**", reply_markup=cancel_kb)
     return ADMIN_BROADCAST
 
-async def admin_broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    all_users = users_col.find({})
-    success_cnt = 0
-    fail_cnt = 0
-
+async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    all_users = list(users_col.find())
+    success_count = 0
+    fail_count = 0
+    
+    status_msg = await update.message.reply_text(f"⏳ **Broadcast Process Shuru Hoche... Total Users: {len(all_users)}**")
+    
     for u in all_users:
         uid = u.get("user_id")
         if not uid:
             continue
         try:
             if update.message.photo:
-                photo_file = update.message.photo[-1].file_id
-                caption = update.message.caption or ""
-                await context.bot.send_photo(chat_id=uid, photo=photo_file, caption=caption, parse_mode="Markdown")
+                photo_file_id = update.message.photo[-1].file_id
+                caption_text = update.message.caption or ""
+                caption_entities = update.message.caption_entities
+                await context.bot.send_photo(
+                    chat_id=uid, 
+                    photo=photo_file_id, 
+                    caption=caption_text,
+                    caption_entities=caption_entities
+                )
             else:
-                await context.bot.send_message(chat_id=uid, text=update.message.text, parse_mode="Markdown")
-            success_cnt += 1
+                text_content = update.message.text or ""
+                text_entities = update.message.entities
+                await context.bot.send_message(
+                    chat_id=uid, 
+                    text=text_content,
+                    entities=text_entities
+                )
+            success_count += 1
             await asyncio.sleep(0.05)
         except Exception:
-            fail_cnt += 1
+            fail_count += 1
 
-    await update.message.reply_text(f"📢 **Broadcast Complete!**\n✅ Success: {success_cnt}\n❌ Failed: {fail_cnt}")
+    result_text = (
+        f"📢 **Broadcast Shes Huyeche!**\n\n"
+        f"✅ **Success:** `{success_count}` Users\n"
+        f"❌ **Failed/Blocked:** `{fail_count}` Users"
+    )
+    await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-def main():
-    # Start Flask Web App in background
-    threading.Thread(target=run_flask, daemon=True).start()
-
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    # Self Ping Loop
-    asyncio.get_event_loop().create_task(self_ping())
-
-    # Conversation Handlers
-    deposit_conv = ConversationHandler(
-        entry_points=[
-            MessageHandler(filters.Regex("^💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃$"), deposit_start),
-            CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$")
-        ],
-        states={
-            WAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)],
-            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
-            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)],
-        },
-        fallbacks=[
-            CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$"),
-            CommandHandler("cancel", cancel_flow)
-        ]
-    )
+# Async Main Runner
+async def run_bot():
+    app = Application.builder().token(BOT_TOKEN).build()
 
     sub_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(sub_start, pattern="^buy_sub_start$")],
@@ -1041,90 +1044,115 @@ def main():
             SUB_PLAN_SELECT: [CallbackQueryHandler(sub_plan_selected, pattern="^sub_plan_")],
             SUB_METHOD_SELECT: [CallbackQueryHandler(sub_method_selected, pattern="^sub_pay_")],
             SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
-            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)],
+            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)]
         },
-        fallbacks=[
-            CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$"),
-            CommandHandler("cancel", cancel_flow)
-        ]
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
+    )
+
+    deposit_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
+        states={
+            WAITING_AMOUNT: [
+                CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)
+            ],
+            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
+            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)]
+        },
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_ban_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_ban_start, pattern="^admin_ban_start$")],
-        states={ADMIN_BAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_user)]},
+        states={ADMIN_BAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_unban_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_unban_start, pattern="^admin_unban_start$")],
-        states={ADMIN_UNBAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_user)]},
+        states={ADMIN_UNBAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_add_bal_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_add_bal_start, pattern="^admin_add_bal_start$")],
         states={
-            ADMIN_ADD_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_get_user)],
-            ADMIN_ADD_BAL_AMT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_get_amt)],
+            ADMIN_ADD_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_user)],
+            ADMIN_ADD_BAL_AMT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_amt)]
         },
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_zero_bal_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_zero_bal_start, pattern="^admin_zero_bal_start$")],
-        states={ADMIN_ZERO_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_zero_bal_user)]},
+        states={ADMIN_ZERO_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_zero_bal_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_rate_wa_hk_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_rate_wa_hk_start, pattern="^admin_rate_wa_hk_start$")],
-        states={ADMIN_RATE_WA_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_hk_set)]},
+        states={ADMIN_RATE_WA_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_hk_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_rate_wa_cl_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_rate_wa_cl_start, pattern="^admin_rate_wa_cl_start$")],
-        states={ADMIN_RATE_WA_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_cl_set)]},
+        states={ADMIN_RATE_WA_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_cl_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_rate_tg_hk_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_rate_tg_hk_start, pattern="^admin_rate_tg_hk_start$")],
-        states={ADMIN_RATE_TG_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_hk_set)]},
+        states={ADMIN_RATE_TG_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_hk_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_rate_tg_cl_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_rate_tg_cl_start, pattern="^admin_rate_tg_cl_start$")],
-        states={ADMIN_RATE_TG_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_cl_set)]},
+        states={ADMIN_RATE_TG_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_cl_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     admin_broadcast_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$")],
-        states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_send)]},
+        states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_process)]},
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
-    # Register Handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(deposit_conv)
-    application.add_handler(sub_conv)
-    application.add_handler(admin_ban_conv)
-    application.add_handler(admin_unban_conv)
-    application.add_handler(admin_add_bal_conv)
-    application.add_handler(admin_zero_bal_conv)
-    application.add_handler(admin_rate_wa_hk_conv)
-    application.add_handler(admin_rate_wa_cl_conv)
-    application.add_handler(admin_rate_tg_hk_conv)
-    application.add_handler(admin_rate_tg_cl_conv)
-    application.add_handler(admin_broadcast_conv)
-    application.add_handler(CallbackQueryHandler(handle_callbacks))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(sub_conv)
+    app.add_handler(deposit_conv)
+    app.add_handler(admin_ban_conv)
+    app.add_handler(admin_unban_conv)
+    app.add_handler(admin_add_bal_conv)
+    app.add_handler(admin_zero_bal_conv)
+    app.add_handler(admin_rate_wa_hk_conv)
+    app.add_handler(admin_rate_wa_cl_conv)
+    app.add_handler(admin_rate_tg_hk_conv)
+    app.add_handler(admin_rate_tg_cl_conv)
+    app.add_handler(admin_broadcast_conv)
+    app.add_handler(CallbackQueryHandler(handle_callbacks))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    # Run Bot
-    logging.info("🚀 Rex Private Telegram Bot is starting...")
-    application.run_polling()
+    # Background tasks
+    asyncio.create_task(self_ping())
+
+    async with app:
+        await app.start()
+        await app.updater.start_polling()
+        logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
+        await asyncio.Event().wait()
+
+def main():
+    threading.Thread(target=run_flask, daemon=True).start()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(run_bot())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        loop.close()
 
 if __name__ == "__main__":
     main()
