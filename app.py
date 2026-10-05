@@ -56,7 +56,8 @@ def home():
     return "Rex Private Telegram Bot is Active!", 200
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8080))
+    # Render dynamic PORT variable receive korbe
+    port = int(os.getenv("PORT", "10000"))
     flask_app.run(host="0.0.0.0", port=port)
 
 # In-Memory Active Orders
@@ -326,7 +327,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_msg, parse_mode="Markdown")
         return
 
-    # COUNTRY SELECTION
     if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"]:
         country_kb = [
             [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
@@ -345,7 +345,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Country set: `CHILE (CL)` 🇨🇱", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
-    # SERVICE SELECTION
     if text == "📱 𝚂𝙴𝚃 𝚂𝙴𝚁𝚅𝙸𝙲𝙴":
         service_kb = [
             [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
@@ -421,7 +420,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🆔 **ID Num:** `{id_num}`\n"
                 f"🌍 **Country:** `{country.upper()}` {country_flag}\n"
                 f"💬 **Service:** `{service.upper()}`\n"
-                f"💵 **Rate:** `${bot_rate}` USDT *(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝙲𝙀 𝙆𝘼𝙏𝘽𝙀)*\n\n"
+                f"💵 **Rate:** `${bot_rate}` USDT *(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝘾𝙀 𝙆𝘼𝙏𝘽𝙀)*\n\n"
                 f"⏳ *𝙾𝚃𝙿 𝙿𝙾𝚆𝙴𝚁 𝙹𝙾𝙽𝙽𝙾 𝙾𝙿𝙴𝙺𝙺𝙷𝙰 𝙺𝙾𝚁𝚄𝙽...*",
                 parse_mode="HTML",
                 reply_markup=inline_kb
@@ -1026,8 +1025,11 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
     await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-# Async Main Runner
-async def run_bot():
+# Main Runner (Asyncio Compatible)
+async def main():
+    # Start Flask Server in background thread
+    threading.Thread(target=run_flask, daemon=True).start()
+
     app = Application.builder().token(BOT_TOKEN).build()
 
     sub_conv = ConversationHandler(
@@ -1130,22 +1132,13 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
+    # Correct Async Lifecycle Startup
     async with app:
+        await app.initialize()
         await app.start()
         await app.updater.start_polling()
         logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
         await asyncio.Event().wait()
 
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
