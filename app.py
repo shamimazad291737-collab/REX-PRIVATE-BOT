@@ -42,13 +42,16 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 # MongoDB Setup
 if not MONGODB_URI:
     logging.error("❌ MONGODB_URI Environment Variable missing!")
-client = MongoClient(MONGODB_URI)
-db = client["vaksms_bot_db"]
 
-users_col = db["users"]
-settings_col = db["settings"]
+try:
+    client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+    db = client["vaksms_bot_db"]
+    users_col = db["users"]
+    settings_col = db["settings"]
+except Exception as e:
+    logging.error(f"❌ MongoDB Connection Error: {e}")
 
-# Flask Web Server (Fixed Port for Render & UptimeRobot)
+# Flask Web Server
 flask_app = Flask("")
 
 @flask_app.route("/")
@@ -56,17 +59,21 @@ def home():
     return "Rex Private Telegram Bot is Active!", 200
 
 def run_flask():
-    # Render-এর দেয়া PORT রিসিভ করবে, না পেলে ১০০০০ পোর্ট ব্যবহার করবে
     port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
 # In-Memory Active Orders
 active_orders = {}
 
-# Conversation States
-WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
-SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
+# Conversation States (Unique Assignment)
 (
+    WAITING_AMOUNT,
+    WAITING_TXID,
+    WAITING_SCREENSHOT,
+    SUB_PLAN,
+    SUB_METHOD,
+    SUB_TXID,
+    SUB_SCREENSHOT,
     ADMIN_BAN,
     ADMIN_UNBAN,
     ADMIN_ADD_BAL_USER,
@@ -77,7 +84,7 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
     ADMIN_RATE_TG_HK_SET,
     ADMIN_RATE_TG_CL_SET,
     ADMIN_BROADCAST,
-) = range(7, 17)
+) = range(17)
 
 # Helper Functions
 def get_country_flag(country_code: str) -> str:
@@ -182,14 +189,14 @@ def get_main_keyboard(user_id):
 def set_number_status(id_num: str, status: str):
     url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
-        return requests.get(url).json()
+        return requests.get(url, timeout=10).json()
     except Exception as e:
         return {"error": str(e)}
 
 def buy_vak_number(service: str = "tg", country: str = "hk", max_price: float = 0.087):
     url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice={max_price}"
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, timeout=10).json()
         
         if isinstance(res, dict) and res.get("error") == "noNumber":
             return {"error": "Stock Out!"}
@@ -207,13 +214,13 @@ def buy_vak_number(service: str = "tg", country: str = "hk", max_price: float = 
                     pass
 
         return res
-    except Exception as e:
+    except Exception:
         return {"error": "Stock Out!"}
 
 def get_vak_balance():
     url = f"https://vak-sms.com/api/getBalance/?apiKey={VAK_SMS_API_KEY}"
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, timeout=10).json()
         return res.get("balance", 0.0)
     except Exception:
         return 0.0
@@ -221,7 +228,7 @@ def get_vak_balance():
 def fetch_otp_code(id_num: str):
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
     try:
-        return requests.get(url).json()
+        return requests.get(url, timeout=10).json()
     except Exception as e:
         return {"error": str(e)}
 
@@ -417,13 +424,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ])
 
             sent_msg = await update.message.reply_text(
-                f"✅ **𝙽𝚄𝙼𝙱𝙴𝚁 𝙱𝚄𝙸𝙻𝙳 𝚂𝚄𝙲𝙲𝙴𝚂𝚂𝙵𝚄𝚈!**\n\n"
-                f"📱 **Number:** `<code>{phone_num}</code>`\n"
-                f"🆔 **ID Num:** `{id_num}`\n"
-                f"🌍 **Country:** `{country.upper()}` {country_flag}\n"
-                f"💬 **Service:** `{service.upper()}`\n"
-                f"💵 **Rate:** `${bot_rate}` USDT *(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝙲𝙀 𝙆𝘼𝙏𝘽𝙀)*\n\n"
-                f"⏳ *𝙾𝚃𝙿 𝙿𝙾𝚆𝙴𝚁 𝙹𝙾𝙽𝙽𝙾 𝙾𝙿𝙴𝙺𝙺𝙷𝙰 𝙺𝙾𝚁𝚄𝙽...*",
+                f"✅ <b>𝙽𝚄𝙼𝙱𝙴𝚁 𝙱𝚄𝙸𝙻𝙳 𝚂𝚄𝙲𝙲𝙴𝚂𝚂𝙵𝚄𝚈!</b>\n\n"
+                f"📱 <b>Number:</b> <code>{phone_num}</code>\n"
+                f"🆔 <b>ID Num:</b> <code>{id_num}</code>\n"
+                f"🌍 <b>Country:</b> <code>{country.upper()}</code> {country_flag}\n"
+                f"💬 <b>Service:</b> <code>{service.upper()}</code>\n"
+                f"💵 <b>Rate:</b> <code>${bot_rate}</code> USDT <i>(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝙲𝙀 𝙆𝘼𝙏𝘽𝙀)</i>\n\n"
+                f"⏳ <i>𝙾𝚃𝙿 𝙿𝙾𝚆𝙴𝚁 𝙹𝙾𝙽𝙽𝙾 𝙾𝙿𝙴𝙺𝙺𝙷𝙰 𝙺𝙾𝚁𝚄𝙽...</i>",
                 parse_mode="HTML",
                 reply_markup=inline_kb
             )
@@ -599,11 +606,11 @@ async def process_otp_success(context, id_num: str, otp: str):
     set_number_status(id_num, "end")
 
     success_text = (
-        f"✅ **𝙾𝚃𝙿 𝚁𝙴𝙲𝙴𝙸𝚅𝙴 𝚂𝚄𝙲𝙲𝙴𝚂𝚂𝙵𝚄𝚈!**\n\n"
-        f"📱 **𝙽𝚄𝙼𝙱𝙴𝚁:** `<code>{phone}</code>`\n"
-        f"🔑 **𝙾𝚃𝙿 𝙲𝙾𝙳𝙴:** `<code>{otp}</code>`\n\n"
-        f"💵 **𝙱𝙰𝙻𝙰𝙽𝙲𝙴 𝙳𝙴𝙳𝙸𝙲𝙰𝚃𝙴𝙳:** `${cost}` USDT\n"
-        f"💰 **𝚁𝙴𝙼𝙰𝙸𝙽𝙸𝙽𝙶 𝙱𝙰𝙻𝙰𝙽𝙲𝙴:** `${rem_bal:.4f}` USDT"
+        f"✅ <b>𝙾𝚃𝙿 𝚁𝙴𝙲𝙴𝙸𝚅𝙴 𝚂𝚄𝙲𝙲𝙴𝚂𝚂𝙵𝚄𝚈!</b>\n\n"
+        f"📱 <b>𝙽𝚄𝙼𝙱𝙴𝚁:</b> <code>{phone}</code>\n"
+        f"🔑 <b>𝙾𝚃𝙿 𝙲𝙾𝙳𝙴:</b> <code>{otp}</code>\n\n"
+        f"💵 <b>𝙱𝙰𝙻𝙰𝙽𝙲𝙴 𝙳𝙴𝙳𝙸𝙲𝙰𝚃𝙴𝙳:</b> <code>${cost}</code> USDT\n"
+        f"💰 <b>𝚁𝙴𝙼𝙰𝙸𝙽𝙸𝙽𝙶 𝙱𝙰𝙻𝙰𝙽𝙲𝙴:</b> <code>${rem_bal:.4f}</code> USDT"
     )
 
     try:
@@ -716,7 +723,7 @@ async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     txid = update.message.text.strip()
     context.user_data["sub_txid"] = txid
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await update.message.reply_text("📸 **පAYMENT-এর 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃 (Photo) 𝙳𝙸𝙽:**", reply_markup=cancel_kb)
+    await update.message.reply_text("📸 **PAYMENT-এর 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃 (Photo) 𝙳𝙸𝙽:**", reply_markup=cancel_kb)
     return SUB_SCREENSHOT
 
 async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1027,16 +1034,15 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
     await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-# Fixed Main Runner Sequence
 def main():
-    # 1. Start Flask in background thread for Render & UptimeRobot Ping
+    # 1. Start Flask web server in background
     threading.Thread(target=run_flask, daemon=True).start()
     logging.info("🌐 Web Server Thread started successfully.")
 
-    # 2. Build Application
+    # 2. Build Bot Application
     app = Application.builder().token(BOT_TOKEN).build()
 
-    # 3. Conversation Handlers Setup
+    # 3. Conversation Handlers
     sub_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(sub_start_5, pattern="^buy_sub_5$"),
@@ -1122,7 +1128,7 @@ def main():
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
-    # 4. Add Handlers to Bot Application
+    # 4. Add Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(sub_conv)
     app.add_handler(deposit_conv)
@@ -1138,7 +1144,7 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    # 5. Run Polling Smoothly
+    # 5. Start Polling
     logging.info("🤖 Starting Bot Polling...")
     app.run_polling()
 
