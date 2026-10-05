@@ -48,7 +48,7 @@ db = client["vaksms_bot_db"]
 users_col = db["users"]
 settings_col = db["settings"]
 
-# Flask Web Server
+# Flask Web Server (Fixed Port for Render & UptimeRobot)
 flask_app = Flask("")
 
 @flask_app.route("/")
@@ -56,7 +56,8 @@ def home():
     return "Rex Private Telegram Bot is Active!", 200
 
 def run_flask():
-    port = int(os.environ.get("PORT", 8080))
+    # Render-এর দেয়া PORT রিসিভ করবে, না পেলে ১০০০০ পোর্ট ব্যবহার করবে
+    port = int(os.environ.get("PORT", 10000))
     flask_app.run(host="0.0.0.0", port=port)
 
 # In-Memory Active Orders
@@ -1026,10 +1027,16 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
     await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-# Async Main Runner
-async def run_bot():
+# Fixed Main Runner Sequence
+def main():
+    # 1. Start Flask in background thread for Render & UptimeRobot Ping
+    threading.Thread(target=run_flask, daemon=True).start()
+    logging.info("🌐 Web Server Thread started successfully.")
+
+    # 2. Build Application
     app = Application.builder().token(BOT_TOKEN).build()
 
+    # 3. Conversation Handlers Setup
     sub_conv = ConversationHandler(
         entry_points=[
             CallbackQueryHandler(sub_start_5, pattern="^buy_sub_5$"),
@@ -1115,6 +1122,7 @@ async def run_bot():
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
+    # 4. Add Handlers to Bot Application
     app.add_handler(CommandHandler("start", start))
     app.add_handler(sub_conv)
     app.add_handler(deposit_conv)
@@ -1130,22 +1138,9 @@ async def run_bot():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    async with app:
-        await app.start()
-        await app.updater.start_polling()
-        logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
-        await asyncio.Event().wait()
-
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
+    # 5. Run Polling Smoothly
+    logging.info("🤖 Starting Bot Polling...")
+    app.run_polling()
 
 if __name__ == "__main__":
     main()
