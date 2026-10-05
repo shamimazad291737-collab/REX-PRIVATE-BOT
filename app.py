@@ -1023,11 +1023,7 @@ async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_
     await status_msg.edit_text(result_text, parse_mode="Markdown")
     return ConversationHandler.END
 
-# Main Runner
-def main():
-    # Start Flask Server in background thread
-    threading.Thread(target=run_flask, daemon=True).start()
-
+async def start_telegram_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     sub_conv = ConversationHandler(
@@ -1130,9 +1126,27 @@ def main():
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    # Standard PTB Runner
     logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
-    app.run_polling()
+    
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    
+    # Keep application running
+    stop_event = asyncio.Event()
+    await stop_event.wait()
+
+def main():
+    # Start Flask Server in background thread
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    # Create & run asyncio event loop explicitly for MainThread
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(start_telegram_bot())
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == "__main__":
     main()
