@@ -1,7 +1,5 @@
-Python-telegram-bot[job-queue]==21.1.1
-APScheduler
-Flask==3.0.3
+python-telegram-bot==20.7
+pymongo==4.6.1
 requests==2.31.0
-gunicorn==22.0.0
-pymongo
-dnspython
+Flask==3.0.0
+gunicorn==21.2.0
