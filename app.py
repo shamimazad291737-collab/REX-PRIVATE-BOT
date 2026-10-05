@@ -55,9 +55,14 @@ flask_app = Flask("")
 def home():
     return "Rex Private Telegram Bot is Active!", 200
 
+@flask_app.route("/health")
+def health():
+    return "OK", 200
+
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
+    # Werkzeug Server Threading and Passthrough
+    flask_app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
 
 # In-Memory Active Orders
 active_orders = {}
@@ -181,14 +186,14 @@ def get_main_keyboard(user_id):
 def set_number_status(id_num: str, status: str):
     url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
-        return requests.get(url).json()
+        return requests.get(url, timeout=10).json()
     except Exception as e:
         return {"error": str(e)}
 
 def buy_vak_number(service: str = "tg", country: str = "hk", max_price: float = 0.087):
     url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice={max_price}"
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, timeout=10).json()
         
         if isinstance(res, dict) and res.get("error") == "noNumber":
             return {"error": "Stock Out!"}
@@ -212,7 +217,7 @@ def buy_vak_number(service: str = "tg", country: str = "hk", max_price: float = 
 def get_vak_balance():
     url = f"https://vak-sms.com/api/getBalance/?apiKey={VAK_SMS_API_KEY}"
     try:
-        res = requests.get(url).json()
+        res = requests.get(url, timeout=10).json()
         return res.get("balance", 0.0)
     except Exception:
         return 0.0
@@ -220,7 +225,7 @@ def get_vak_balance():
 def fetch_otp_code(id_num: str):
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
     try:
-        return requests.get(url).json()
+        return requests.get(url, timeout=10).json()
     except Exception as e:
         return {"error": str(e)}
 
@@ -421,7 +426,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🆔 **ID Num:** `{id_num}`\n"
                 f"🌍 **Country:** `{country.upper()}` {country_flag}\n"
                 f"💬 **Service:** `{service.upper()}`\n"
-                f"💵 **Rate:** `${bot_rate}` USDT *(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝙲𝙀 𝙆𝘼𝙏𝘽𝙀)*\n\n"
+                f"💵 **Rate:** `${bot_rate}` USDT *(𝙊𝙏𝙋 𝘼𝙎𝙇𝙀𝙄 𝘽𝘼𝙇𝘼𝙉𝘾𝙀 𝙆𝘼𝙏𝘽𝙀)*\n\n"
                 f"⏳ *𝙾𝚃𝙿 𝙿𝙾𝚆𝙴𝚁 𝙹𝙾𝙽𝙽𝙾 𝙾𝙿𝙴𝙺𝙺𝙷𝙰 𝙺𝙾𝚁𝚄𝙽...*",
                 parse_mode="HTML",
                 reply_markup=inline_kb
@@ -610,197 +615,122 @@ async def process_otp_success(context, id_num: str, otp: str):
             chat_id=uid,
             message_id=msg_id,
             text=success_text,
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=None
         )
     except Exception:
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="HTML")
 
-    masked_phone = mask_number(phone)
-    group_forward_msg = (
-        f"🌐 **COUNTRY:** `{country_code.upper()}` {country_flag}\n"
-        f"📱 **𝙽𝚄𝙼𝙱𝙴𝚁:** `{masked_phone}`\n"
-        f"🔑 **𝙾𝚃𝙿:** `{otp}`\n"
-        f"💬 **Message:** `YOUR {service_type} CODE: {otp}`"
-    )
-
     if OTP_GROUP_ID:
         try:
-            await context.bot.send_message(
-                chat_id=OTP_GROUP_ID,
-                text=group_forward_msg,
-                parse_mode="Markdown"
+            masked_ph = mask_number(phone)
+            group_msg = (
+                f"📥 **NEW OTP RECEIVED**\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"🛠 **Service:** `{service_type}`\n"
+                f"🌍 **Country:** `{country_code.upper()}` {country_flag}\n"
+                f"📱 **Phone:** `{masked_ph}`\n"
+                f"🔐 **OTP:** `<code>{otp}</code>`\n"
+                f"⏰ **Time:** `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
+                f"━━━━━━━━━━━━━━━━━━━"
             )
-            logging.info(f"OTP Forwarded to Group {OTP_GROUP_ID} successfully.")
+            await context.bot.send_message(chat_id=OTP_GROUP_ID, text=group_msg, parse_mode="HTML")
         except Exception as e:
-            logging.error(f"Failed to forward OTP to group: {e}")
+            logging.error(f"Failed to send OTP to group: {e}")
 
-async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str, msg_id: int):
-    for _ in range(35):
-        await asyncio.sleep(6)
+async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone: str, msg_id: int):
+    for _ in range(120):
+        await asyncio.sleep(5)
         if id_num not in active_orders:
-            break
+            return
 
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
-            break
+            return
 
-async def sub_start_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 5}})
-    
-    pay_methods_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷 (50 Tk)", callback_data="pay_method_bkash")],
-        [InlineKeyboardButton("💛 Binance Pay (0.40 USDT)", callback_data="pay_method_binance")],
-        [InlineKeyboardButton("❌ 𝙲𝙰𝙽𝙲𝙴𝙻", callback_data="cancel_flow_cb")]
-    ])
-    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 5 Days - 50 Tk / 0.40 USDT):**", reply_markup=pay_methods_kb)
-    return SUB_METHOD
+    if id_num in active_orders:
+        set_number_status(id_num, "bad")
+        active_orders.pop(id_num, None)
+        try:
+            await context.bot.edit_message_text(
+                chat_id=user_id,
+                message_id=msg_id,
+                text="⏳ **Time expired! OTP aseni, number-ti auto-cancel kora hoyeche.**",
+                reply_markup=None
+            )
+        except Exception:
+            pass
 
-async def sub_start_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 7}})
-    
-    pay_methods_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 𝙱𝙺𝙰𝚂𝙷 (70 Tk)", callback_data="pay_method_bkash")],
-        [InlineKeyboardButton("💛 Binance Pay (0.56 USDT)", callback_data="pay_method_binance")],
-        [InlineKeyboardButton("❌ 𝙲𝙰𝙽𝙲𝙴𝙻", callback_data="cancel_flow_cb")]
-    ])
-    await query.message.reply_text("💳 **𝙿𝙰𝚈𝙼𝙴𝙽𝚃 𝙼𝙴𝚃𝙷𝙾𝙳 𝚂𝙴𝙻𝙴𝙲𝚃 𝙺𝙾𝚁𝚄𝙽 (Plan: 7 Days - 70 Tk / 0.56 USDT):**", reply_markup=pay_methods_kb)
-    return SUB_METHOD
+# Deposit Conversation
+async def start_deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    u_data = get_user(user_id)
+    if u_data and u_data.get("is_banned", False):
+        await update.message.reply_text("❌ 𝚈𝙾𝚄𝚁 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙷𝙰𝚂 𝙱𝙴𝙴𝙽 𝙱𝙰𝙽 𝙱𝚈 𝙰𝙳𝙼𝙸𝙽.")
+        return ConversationHandler.END
 
-async def sub_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user_id = query.from_user.id
-    data = query.data
-    
-    user_doc = users_col.find_one({"user_id": user_id})
-    days = user_doc.get("sub_days", 5) if user_doc else 5
-    
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    
-    if data == "pay_method_bkash":
-        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "bkash"}})
-        price = 50 if days == 5 else 70
-        msg = (
-            f"💰 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
-            f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price} Tk`\n\n"
-            f"👇 **𝚂𝙴𝙽𝙳 𝙱𝙺𝙰𝚂𝙷 𝙿𝙴𝚁𝚂𝙾𝙽𝙰𝙻 𝙽𝚄𝙼𝙱𝙴𝚁:**\n"
-            f"📱 𝙱𝙺𝙰𝚂𝙷 𝙽𝚄𝙼𝙱𝙴𝚁: `{ADMIN_BKASH}`\n\n"
-            f"𝚃𝙰𝙺𝙰 𝙳𝙴𝙰 𝚂𝙴𝚂𝙴 **TrxID**-𝚃𝙸 𝙻𝙸𝙺𝙷𝙴 𝙿𝙰𝚃𝙷𝙰𝙽:"
-        )
-        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
-        return SUB_TXID
-        
-    elif data == "pay_method_binance":
-        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "binance"}})
-        usdt_amt = 0.40 if days == 5 else 0.56
-        msg = (
-            f"💰 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
-            f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{usdt_amt}` USDT (Rate: 125 Tk/$)\n\n"
-            f"👇 **𝚂𝙴𝙽𝙳 𝙱𝙸𝙽𝙰𝙽𝙲𝙴 𝙿𝙰𝚈 𝙸𝙳:**\n"
-            f"🆔 𝙱𝙸𝙽𝙰𝙽𝙲𝙴 𝙿𝙰𝚈 𝙸𝙳: `{BINANCE_ID}`\n\n"
-            f"ডলার সেন্ড করার পর আপনার **Order ID / TxID**-টি লিখে পাঠান:"
-        )
-        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
-        return SUB_TXID
+    if not is_bot_active() and user_id != ADMIN_ID:
+        await update.message.reply_text("🚧 **𝙱𝙾𝚃 𝚄𝙽𝙳𝙴𝚁 𝙼𝙰𝙸𝙽𝚃𝙰𝙸𝙽𝚂 𝙱𝚈 𝙰𝙳𝙼𝙸𝙽.**")
+        return ConversationHandler.END
 
-async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txid = update.message.text.strip()
-    context.user_data["sub_txid"] = txid
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await update.message.reply_text("📸 **පAYMENT-এর 𝚂𝙲𝚁𝙴𝙴𝙽𝚂𝙷𝙾𝚃 (Photo) 𝙳𝙸𝙽:**", reply_markup=cancel_kb)
-    return SUB_SCREENSHOT
+    if not is_subscribed(user_id):
+        sub_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
+            [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
+        ])
+        await update.message.reply_text("❌ 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽 𝙴𝚇𝙿𝙸𝚁𝙴𝚂! 𝙱𝚄𝚈 𝙽𝙴𝚆 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("👇 **𝙱𝚄𝚈 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽:**", reply_markup=sub_kb)
+        return ConversationHandler.END
 
-async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    photo = update.message.photo[-1]
-    txid = context.user_data.get("sub_txid")
-    user_doc = users_col.find_one({"user_id": user.id})
-    days = user_doc.get("sub_days", 5) if user_doc else 5
-    method = user_doc.get("sub_method", "bkash").upper()
-    
-    if method == "BKASH":
-        price_str = f"{50 if days == 5 else 70} Tk"
-    else:
-        price_str = f"{0.40 if days == 5 else 0.56} USDT"
-
-    admin_kb = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton("✅ 𝙰𝙿𝙿𝚁𝙾𝚅𝙴𝙳", callback_data=f"approve_sub_{user.id}"),
-            InlineKeyboardButton("❌ 𝚁𝙴𝙹𝙴𝙲𝚃𝙴𝙳", callback_data=f"reject_sub_{user.id}")
-        ]
-    ])
-
-    caption = (
-        f"🔔 **𝙽𝙴𝚆 𝚂𝚄𝙱𝚂𝙲𝚁𝙸𝙿𝚃𝙸𝙾𝙽 𝚁𝙴𝙹𝚄𝙴𝚂𝚃!**\n\n"
-        f"👤 **𝚄𝚂𝙴𝚁:** {user.full_name} (`{user.id}`)\n"
-        f"💳 **𝙼𝙴𝚃𝙷𝙾𝙳:** `{method}`\n"
-        f"📅 **𝙿𝙻𝙰𝙽:** `{days} Days`\n"
-        f"💰 **𝙰𝙼𝙾𝚄𝙽𝚃:** `{price_str}`\n"
-        f"🧾 **𝚃𝚁𝚇𝙸𝙳 / 𝙾𝚁𝙳𝙴𝚁 𝙸𝙳:** `{txid}`"
+    cancel_kb = ReplyKeyboardMarkup([[KeyboardButton("❌ Cancel Deposit")]], resize_keyboard=True)
+    msg = (
+        f"💵 **Deposit USDT (Binance Pay / Pay ID)**\n\n"
+        f"📌 **Binance Pay / Pay ID:** `<code>{BINANCE_ID}</code>`\n"
+        f"💵 **bKash Personal (Send Money):** `<code>{ADMIN_BKASH}</code>` *(125 Tk/USDT)*\n\n"
+        f"➡️ **Koto USDT deposit korte chan likhun (Minimum $0.5 USDT):**"
     )
-
-    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
-    await update.message.reply_text("✅ **Apnar subscription request admin-er kache pathano hoyeche!** Admin approve korlei bot active hoye jaabe.")
-    return ConversationHandler.END
-
-async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    payment_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("💛 Binance Pay", callback_data="pay_binance")],
-        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]
-    ])
-    await update.message.reply_text("💳 **Payment Method select korunk:**", reply_markup=payment_kb)
-    return WAITING_AMOUNT
-
-async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("📥 **Apni koto USDT pathaben ta likhe janan (Minimum: `1` USDT, jemon: `1`, `2.5`, `5`):**", reply_markup=cancel_kb)
+    await update.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
     return WAITING_AMOUNT
 
 async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    if text == "❌ Cancel Deposit":
+        await update.message.reply_text("❌ Deposit batil kora hoyeche.", reply_markup=get_main_keyboard(update.effective_user.id))
+        return ConversationHandler.END
+
     try:
-        amount = float(update.message.text.strip())
-        if amount < 1.0:
-            cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-            await update.message.reply_text("❌ Minimum deposit amount **1 USDT**. Doya kore 1 ba tar besi amount likhun.", reply_markup=cancel_kb)
+        amount = float(text)
+        if amount < 0.1:
+            await update.message.reply_text("⚠️ Minimum deposit **$0.1 USDT**। Abar likhun:")
             return WAITING_AMOUNT
 
         context.user_data["dep_amount"] = amount
-        
-        msg = (
-            f"💰 **Deposit Amount:** `{amount}` USDT\n\n"
-            f"👇 **Nicher Binance Pay ID-te Binance app theke Pay/Send Money Korun:**\n"
-            f"🆔 **Binance Pay ID:** `{BINANCE_ID}`\n\n"
-            f"⚠️ **Note:** Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n\n"
-            f"Dollar pathanor por apnar **Order ID / TxID**-ti likhe message din:"
-        )
-        cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=cancel_kb)
+        await update.message.reply_text("📝 **Transaction ID / TrxID**-ti ekhane pathan:")
         return WAITING_TXID
     except ValueError:
-        cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-        await update.message.reply_text("❌ Sothik shongkha likhun (jemon: `1` ba `5`).", reply_markup=cancel_kb)
+        await update.message.reply_text("⚠️ Sothik shongkha (number) likhun. jemon: 5 or 10")
         return WAITING_AMOUNT
 
 async def deposit_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txid = update.message.text.strip()
-    context.user_data["dep_txid"] = txid
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await update.message.reply_text("📸 **Ekhon apnar payment-er screenshot (Photo) Pathan:**", reply_markup=cancel_kb)
+    text = update.message.text.strip()
+    if text == "❌ Cancel Deposit":
+        await update.message.reply_text("❌ Deposit batil kora hoyeche.", reply_markup=get_main_keyboard(update.effective_user.id))
+        return ConversationHandler.END
+
+    context.user_data["dep_txid"] = text
+    await update.message.reply_text("📸 Pament-er **Screenshot**-ti ekhane photo hisebe pathan:")
     return WAITING_SCREENSHOT
 
 async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    photo = update.message.photo[-1]
+    photo = update.message.photo[-1] if update.message.photo else None
+
+    if not photo:
+        await update.message.reply_text("⚠️ Daya kare ekta **Screenshot Photo** pathan:")
+        return WAITING_SCREENSHOT
+
     amount = context.user_data.get("dep_amount")
     txid = context.user_data.get("dep_txid")
 
@@ -812,340 +742,368 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
     ])
 
     caption = (
-        f"📥 **Notun Deposit Request!**\n\n"
+        f"📥 **NEW DEPOSIT REQUEST**\n\n"
         f"👤 **User:** {user.full_name} (`{user.id}`)\n"
-        f"💰 **Amount:** `${amount}` USDT\n"
-        f"🧾 **TxID:** `{txid}`"
+        f"💵 **Amount:** `${amount}` USDT\n"
+        f"🆔 **TrxID:** `{txid}`"
     )
 
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
-    await update.message.reply_text("✅ **Apnar deposit request admin-er kache pathano hoyeche!** Jaachai kore druto balance jukto kora hobe.")
+    await update.message.reply_text(
+        "✅ **Apnar deposit request-ti Admin-er kache pathano hoyeche!**\nAdmin verify kore approve korlei apnar balance-e dollar jukto hoye jabe.",
+        reply_markup=get_main_keyboard(user.id)
+    )
     return ConversationHandler.END
 
-async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.callback_query:
-        query = update.callback_query
-        await query.answer()
-        await query.message.edit_text("❌ Process batil kora hoyeche.")
-    elif update.message:
-        await update.message.reply_text("❌ Process batil kora hoyeche.")
+# Subscription Purchase Conversation
+async def handle_buy_sub_btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_id = query.from_user.id
+
+    if data == "buy_sub_5":
+        days = 5
+        bdt = 50
+        usdt = 0.40
+    elif data == "buy_sub_7":
+        days = 7
+        bdt = 70
+        usdt = 0.56
+    else:
+        return
+
+    users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": days}})
+
+    method_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📱 bKash (Bkash Send Money)", callback_data=f"submethod_bkash_{days}")],
+        [InlineKeyboardButton("💳 Binance Pay (USDT)", callback_data=f"submethod_binance_{days}")]
+    ])
+
+    await query.message.reply_text(
+        f"🛒 **Subscription Plan: {days} Days**\n"
+        f"• BDT Price: **{bdt} Tk**\n"
+        f"• USDT Price: **${usdt} USDT**\n\n"
+        f"👇 **Kiser maddhome payment korte chan select korun:**",
+        reply_markup=method_kb,
+        parse_mode="Markdown"
+    )
+
+async def handle_sub_method(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    user_id = query.from_user.id
+
+    parts = data.split("_")
+    method = parts[1]
+    days = int(parts[2])
+
+    users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": method, "sub_days": days}})
+
+    bdt = 50 if days == 5 else 70
+    usdt = 0.40 if days == 5 else 0.56
+
+    if method == "bkash":
+        msg = (
+            f"📱 **bKash Payment Details:**\n\n"
+            f"📌 **Number (Send Money):** `<code>{ADMIN_BKASH}</code>`\n"
+            f"💵 **Amount:** **{bdt} BDT**\n\n"
+            f"➡️ Taka pathanor por TrxID and Screenshot dite hobe.\n\n"
+            f"✍️ **Apnar Payment TrxID-ti ekhane likhe pathan:**"
+        )
+    else:
+        msg = (
+            f"💳 **Binance Pay Details:**\n\n"
+            f"📌 **Binance Pay / Pay ID:** `<code>{BINANCE_ID}</code>`\n"
+            f"💵 **Amount:** **${usdt} USDT**\n\n"
+            f"➡️ Dollar pathanor por TrxID and Screenshot dite hobe.\n\n"
+            f"✍️ **Apnar Payment TrxID / Order ID-ti ekhane likhe pathan:**"
+        )
+
+    await query.message.reply_text(msg, parse_mode="HTML")
+    return SUB_TXID
+
+async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text.strip()
+    context.user_data["sub_txid_input"] = text
+    await update.message.reply_text("📸 Ebar Payment-er **Screenshot Photo**-ti ekhane pathan:")
+    return SUB_SCREENSHOT
+
+async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    photo = update.message.photo[-1] if update.message.photo else None
+
+    if not photo:
+        await update.message.reply_text("⚠️ Daya kare ekta **Screenshot Photo** pathan:")
+        return SUB_SCREENSHOT
+
+    u_data = get_user(user.id)
+    days = u_data.get("sub_days", 5) if u_data else 5
+    method = u_data.get("sub_method", "bkash") if u_data else "bkash"
+    txid = context.user_data.get("sub_txid_input", "N/A")
+
+    admin_kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Approve Sub", callback_data=f"approve_sub_{user.id}"),
+            InlineKeyboardButton("❌ Reject Sub", callback_data=f"reject_sub_{user.id}")
+        ]
+    ])
+
+    caption = (
+        f"👑 **NEW SUBSCRIPTION REQUEST**\n\n"
+        f"👤 **User:** {user.full_name} (`{user.id}`)\n"
+        f"⏱ **Plan:** `{days} Days`\n"
+        f"💳 **Method:** `{method.upper()}`\n"
+        f"🆔 **TrxID:** `{txid}`"
+    )
+
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="Markdown", reply_markup=admin_kb)
+    await update.message.reply_text(
+        "✅ **Apnar Subscription Request-ti Admin-er kache pathano hoyeche!**\nAdmin verify kore approve korlei apnar bot active hoye jabe."
+    )
     return ConversationHandler.END
 
+# Admin Conversation Functions
 async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("🚫 **Banned korte chawa User ID-ti likhe pathan:**")
+    await query.message.reply_text("🚫 **Kake Ban korte chan? User ID-ti likhun:**")
     return ADMIN_BAN
 
-async def admin_ban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_ban_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
-        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": True}})
-        await update.message.reply_text(f"✅ User `{uid}`-ke banned kora hoyeche.", parse_mode="Markdown")
+        users_col.update_one({"user_id": uid}, {"$set": {"is_banned": True}}, upsert=True)
+        await update.message.reply_text(f"✅ User `{uid}`-ke Ban kora hoyeche.", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID.")
+        await update.message.reply_text("⚠️ Sothik numeric User ID likhun.")
     return ConversationHandler.END
 
 async def admin_unban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("✅ **Unban korte chawa User ID-ti likhe pathan:**")
+    await query.message.reply_text("✅ **Kake Unban korte chan? User ID-ti likhun:**")
     return ADMIN_UNBAN
 
-async def admin_unban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_unban_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
         users_col.update_one({"user_id": uid}, {"$set": {"is_banned": False}})
-        await update.message.reply_text(f"✅ User `{uid}`-ke unban kora hoyeche.", parse_mode="Markdown")
+        await update.message.reply_text(f"✅ User `{uid}`-ke Unban kora hoyeche.", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID.")
+        await update.message.reply_text("⚠️ Sothik numeric User ID likhun.")
     return ConversationHandler.END
 
 async def admin_add_bal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("➕ **Balance add korte chawa User ID-ti pathan:**")
+    await query.message.reply_text("➕ **Kaar balance-e dollar jog korte chan? User ID likhun:**")
     return ADMIN_ADD_BAL_USER
 
 async def admin_add_bal_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
         context.user_data["target_add_uid"] = uid
-        await update.message.reply_text(f"💰 **User `{uid}`-er jonno koto USDT balance add korben ta likhun:**", parse_mode="Markdown")
+        await update.message.reply_text(f"💵 **Koto USDT jog korte chan? (Jemon: 5 or 2.5):**")
         return ADMIN_ADD_BAL_AMT
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID.")
-        return ConversationHandler.END
+        await update.message.reply_text("⚠️ Sothik numeric User ID likhun.")
+        return ADMIN_ADD_BAL_USER
 
 async def admin_add_bal_amt(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         amt = float(update.message.text.strip())
         uid = context.user_data.get("target_add_uid")
-        users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}})
-        
-        u = get_user(uid)
-        new_bal = u.get("balance", 0.0) if u else amt
-        
-        await update.message.reply_text(f"✅ Successfully added `${amt}` USDT to User `{uid}`. Notun Balance: `${new_bal:.4f}` USDT", parse_mode="Markdown")
-        await context.bot.send_message(chat_id=uid, text=f"🎉 **Admin apnar account-e `${amt}` USDT balance add koreche!**")
+        users_col.update_one({"user_id": uid}, {"$inc": {"balance": amt}}, upsert=True)
+        await update.message.reply_text(f"✅ User `{uid}`-er balance-e `${amt}` USDT add kora hoyeche.", parse_mode="Markdown")
+        try:
+            await context.bot.send_message(chat_id=uid, text=f"🎉 **Admin apnar balance-e `${amt}` USDT add koreche!**")
+        except Exception:
+            pass
     except ValueError:
-        await update.message.reply_text("❌ Invalid Amount.")
+        await update.message.reply_text("⚠️ Sothik amount likhun.")
     return ConversationHandler.END
 
 async def admin_zero_bal_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("🔄 **Je user-er balance 0 (zero) korte chan, tar User ID-ti pathan:**", parse_mode="Markdown")
+    await query.message.reply_text("🔄 **Kaar balance 0 (Zero) korte chan? User ID likhun:**")
     return ADMIN_ZERO_BAL_USER
 
-async def admin_zero_bal_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_zero_bal_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
-        result = users_col.update_one({"user_id": uid}, {"$set": {"balance": 0.0}})
-        
-        if result.matched_count > 0:
-            await update.message.reply_text(f"✅ Successfully User `{uid}`-er balance **0 USDT** kora hoyeche.", parse_mode="Markdown")
-            try:
-                await context.bot.send_message(chat_id=uid, text="⚠️ **Admin apnar account-er balance 0 kore diyeche.**")
-            except Exception:
-                pass
-        else:
-            await update.message.reply_text(f"❌ Database-e `{uid}` ID-er kono user pawa jayni.")
-            
+        users_col.update_one({"user_id": uid}, {"$set": {"balance": 0.0}})
+        await update.message.reply_text(f"✅ User `{uid}`-er balance $0.00 kora hoyeche.", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
+        await update.message.reply_text("⚠️ Sothik numeric User ID likhun.")
     return ConversationHandler.END
 
+# RATE SETTING HANDLERS
 async def admin_rate_wa_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("💵 **Hong Kong (HK) WhatsApp (WA)-er notun Bot Rate USDT-te likhun (jemon: `0.075` ba `0.10`):**")
+    curr = get_rate("wa", "hk")
+    await query.message.reply_text(f"💵 **Current HK WhatsApp Rate:** `${curr}` USDT\n\n**Nokun Price/Rate USDT-te likhun (Jemon: 0.10):**")
     return ADMIN_RATE_WA_HK_SET
 
-async def admin_rate_wa_hk_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_wa_hk_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        rate = float(update.message.text.strip())
-        set_rate("wa", "hk", rate)
-        await update.message.reply_text(f"✅ Hong Kong WA Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
+        r = float(update.message.text.strip())
+        set_rate("wa", "hk", r)
+        await update.message.reply_text(f"✅ **HK WhatsApp Rate updated to:** `${r}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
+        await update.message.reply_text("⚠️ Sothik number likhun.")
     return ConversationHandler.END
 
 async def admin_rate_wa_cl_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("💵 **Chile (CL) WhatsApp (WA)-er notun Bot Rate USDT-te likhun (jemon: `0.087` ba `0.10`):**")
+    curr = get_rate("wa", "cl")
+    await query.message.reply_text(f"💵 **Current CL WhatsApp Rate:** `${curr}` USDT\n\n**Nokun Price/Rate USDT-te likhun (Jemon: 0.10):**")
     return ADMIN_RATE_WA_CL_SET
 
-async def admin_rate_wa_cl_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_wa_cl_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        rate = float(update.message.text.strip())
-        set_rate("wa", "cl", rate)
-        await update.message.reply_text(f"✅ Chile WA Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
+        r = float(update.message.text.strip())
+        set_rate("wa", "cl", r)
+        await update.message.reply_text(f"✅ **CL WhatsApp Rate updated to:** `${r}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
+        await update.message.reply_text("⚠️ Sothik number likhun.")
     return ConversationHandler.END
 
 async def admin_rate_tg_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("💵 **Hong Kong (HK) Telegram (TG)-er notun Bot Rate USDT-te likhun (jemon: `0.10` ba `0.12`):**")
+    curr = get_rate("tg", "hk")
+    await query.message.reply_text(f"💵 **Current HK Telegram Rate:** `${curr}` USDT\n\n**Nokun Price/Rate USDT-te likhun (Jemon: 0.12):**")
     return ADMIN_RATE_TG_HK_SET
 
-async def admin_rate_tg_hk_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_tg_hk_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        rate = float(update.message.text.strip())
-        set_rate("tg", "hk", rate)
-        await update.message.reply_text(f"✅ Hong Kong TG Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
+        r = float(update.message.text.strip())
+        set_rate("tg", "hk", r)
+        await update.message.reply_text(f"✅ **HK Telegram Rate updated to:** `${r}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
+        await update.message.reply_text("⚠️ Sothik number likhun.")
     return ConversationHandler.END
 
 async def admin_rate_tg_cl_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.message.reply_text("💵 **Chile (CL) Telegram (TG)-er notun Bot Rate USDT-te likhun (jemon: `0.10` ba `0.12`):**")
+    curr = get_rate("tg", "cl")
+    await query.message.reply_text(f"💵 **Current CL Telegram Rate:** `${curr}` USDT\n\n**Nokun Price/Rate USDT-te likhun (Jemon: 0.12):**")
     return ADMIN_RATE_TG_CL_SET
 
-async def admin_rate_tg_cl_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def admin_rate_tg_cl_save(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        rate = float(update.message.text.strip())
-        set_rate("tg", "cl", rate)
-        await update.message.reply_text(f"✅ Chile TG Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
+        r = float(update.message.text.strip())
+        set_rate("tg", "cl", r)
+        await update.message.reply_text(f"✅ **CL Telegram Rate updated to:** `${r}` USDT", parse_mode="Markdown")
     except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
+        await update.message.reply_text("⚠️ Sothik number likhun.")
     return ConversationHandler.END
 
 async def admin_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("📢 **Sobai ke broadcast korte chawa message-ti (Text/Photo) ekhane pathan:**", reply_markup=cancel_kb)
+    await query.message.reply_text("📢 **Sob user-er kache je message-ti Broadcast korte chan seti likhun:**")
     return ADMIN_BROADCAST
 
-async def admin_broadcast_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    all_users = list(users_col.find())
-    success_count = 0
-    fail_count = 0
-    
-    status_msg = await update.message.reply_text(f"⏳ **Broadcast Process Shuru Hoche... Total Users: {len(all_users)}**")
-    
+async def admin_broadcast_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg_text = update.message.text
+    all_users = list(users_col.find({}))
+    success = 0
+    fail = 0
+
     for u in all_users:
         uid = u.get("user_id")
-        if not uid:
-            continue
-        try:
-            if update.message.photo:
-                photo_file_id = update.message.photo[-1].file_id
-                caption_text = update.message.caption or ""
-                caption_entities = update.message.caption_entities
-                await context.bot.send_photo(
-                    chat_id=uid, 
-                    photo=photo_file_id, 
-                    caption=caption_text,
-                    caption_entities=caption_entities
-                )
-            else:
-                text_content = update.message.text or ""
-                text_entities = update.message.entities
-                await context.bot.send_message(
-                    chat_id=uid, 
-                    text=text_content,
-                    entities=text_entities
-                )
-            success_count += 1
-            await asyncio.sleep(0.05)
-        except Exception:
-            fail_count += 1
+        if uid:
+            try:
+                await context.bot.send_message(chat_id=uid, text=f"📢 **ADMIN ANNOUNCEMENT:**\n\n{msg_text}", parse_mode="Markdown")
+                success += 1
+            except Exception:
+                fail += 1
 
-    result_text = (
-        f"📢 **Broadcast Shes Huyeche!**\n\n"
-        f"✅ **Success:** `{success_count}` Users\n"
-        f"❌ **Failed/Blocked:** `{fail_count}` Users"
-    )
-    await status_msg.edit_text(result_text, parse_mode="Markdown")
+    await update.message.reply_text(f"✅ **Broadcast Completed!**\n• Success: {success}\n• Failed: {fail}")
     return ConversationHandler.END
 
-# Async Main Runner
-async def run_bot():
-    app = Application.builder().token(BOT_TOKEN).build()
+async def cancel_conv(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Operation batil kora hoyeche.", reply_markup=get_main_keyboard(update.effective_user.id))
+    return ConversationHandler.END
 
+# Main Application Execution
+def main():
+    # Flask Server setup via Daemon Thread for Non-Blocking execution
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    logging.info("⚡ Flask Keep-Alive Server Started Daemon Thread")
+
+    # Telegram Bot Application
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    # Deposit Conversation Handler
+    deposit_conv = ConversationHandler(
+        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃$"), start_deposit)],
+        states={
+            WAITING_AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)],
+            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
+            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_conv)],
+    )
+
+    # Subscription Input Conversation Handler
     sub_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_sub_method, pattern="^submethod_")],
+        states={
+            SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
+            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel_conv)],
+    )
+
+    # Admin Action Conversations
+    admin_conv = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(sub_start_5, pattern="^buy_sub_5$"),
-            CallbackQueryHandler(sub_start_7, pattern="^buy_sub_7$")
+            CallbackQueryHandler(admin_ban_start, pattern="^admin_ban_start$"),
+            CallbackQueryHandler(admin_unban_start, pattern="^admin_unban_start$"),
+            CallbackQueryHandler(admin_add_bal_start, pattern="^admin_add_bal_start$"),
+            CallbackQueryHandler(admin_zero_bal_start, pattern="^admin_zero_bal_start$"),
+            CallbackQueryHandler(admin_rate_wa_hk_start, pattern="^admin_rate_wa_hk_start$"),
+            CallbackQueryHandler(admin_rate_wa_cl_start, pattern="^admin_rate_wa_cl_start$"),
+            CallbackQueryHandler(admin_rate_tg_hk_start, pattern="^admin_rate_tg_hk_start$"),
+            CallbackQueryHandler(admin_rate_tg_cl_start, pattern="^admin_rate_tg_cl_start$"),
+            CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$"),
         ],
         states={
-            SUB_METHOD: [
-                CallbackQueryHandler(sub_method_selected, pattern="^pay_method_(bkash|binance)$")
-            ],
-            SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
-            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)]
-        },
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    deposit_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
-        states={
-            WAITING_AMOUNT: [
-                CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$"),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)
-            ],
-            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
-            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)]
-        },
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_ban_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_ban_start, pattern="^admin_ban_start$")],
-        states={ADMIN_BAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_unban_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_unban_start, pattern="^admin_unban_start$")],
-        states={ADMIN_UNBAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_add_bal_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_add_bal_start, pattern="^admin_add_bal_start$")],
-        states={
+            ADMIN_BAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_ban_save)],
+            ADMIN_UNBAN: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_unban_save)],
             ADMIN_ADD_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_user)],
-            ADMIN_ADD_BAL_AMT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_amt)]
+            ADMIN_ADD_BAL_AMT: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_add_bal_amt)],
+            ADMIN_ZERO_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_zero_bal_save)],
+            ADMIN_RATE_WA_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_hk_save)],
+            ADMIN_RATE_WA_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_cl_save)],
+            ADMIN_RATE_TG_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_hk_save)],
+            ADMIN_RATE_TG_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_cl_save)],
+            ADMIN_BROADCAST: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_broadcast_send)],
         },
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
+        fallbacks=[CommandHandler("cancel", cancel_conv)],
     )
 
-    admin_zero_bal_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_zero_bal_start, pattern="^admin_zero_bal_start$")],
-        states={ADMIN_ZERO_BAL_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_zero_bal_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
+    # Handlers Registration
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(deposit_conv)
+    application.add_handler(sub_conv)
+    application.add_handler(admin_conv)
+    application.add_handler(CallbackQueryHandler(handle_buy_sub_btn, pattern="^buy_sub_"))
+    application.add_handler(CallbackQueryHandler(handle_callbacks))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
-    admin_rate_wa_hk_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_wa_hk_start, pattern="^admin_rate_wa_hk_start$")],
-        states={ADMIN_RATE_WA_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_hk_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_rate_wa_cl_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_wa_cl_start, pattern="^admin_rate_wa_cl_start$")],
-        states={ADMIN_RATE_WA_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_cl_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_rate_tg_hk_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_tg_hk_start, pattern="^admin_rate_tg_hk_start$")],
-        states={ADMIN_RATE_TG_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_hk_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_rate_tg_cl_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_tg_cl_start, pattern="^admin_rate_tg_cl_start$")],
-        states={ADMIN_RATE_TG_CL_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_cl_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_broadcast_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$")],
-        states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(sub_conv)
-    app.add_handler(deposit_conv)
-    app.add_handler(admin_ban_conv)
-    app.add_handler(admin_unban_conv)
-    app.add_handler(admin_add_bal_conv)
-    app.add_handler(admin_zero_bal_conv)
-    app.add_handler(admin_rate_wa_hk_conv)
-    app.add_handler(admin_rate_wa_cl_conv)
-    app.add_handler(admin_rate_tg_hk_conv)
-    app.add_handler(admin_rate_tg_cl_conv)
-    app.add_handler(admin_broadcast_conv)
-    app.add_handler(CallbackQueryHandler(handle_callbacks))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
-
-    async with app:
-        await app.start()
-        await app.updater.start_polling()
-        logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
-        await asyncio.Event().wait()
-
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_bot())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.close()
+    # Run Telegram Bot
+    logging.info("🚀 Telegram Bot is running...")
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
