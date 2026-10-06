@@ -644,16 +644,31 @@ async def process_otp_success(context, id_num: str, otp: str):
             logging.error(f"Failed to forward OTP to group: {e}")
 
 async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str, msg_id: int):
-    for _ in range(35):
+    # ৫০ বার ৬ সেকেন্ড করে চেক করবে (মোট ৩০০ সেকেন্ড বা ৫ মিনিট)
+    for _ in range(50):
         await asyncio.sleep(6)
         if id_num not in active_orders:
-            break
+            return
 
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
-            break
+            return
+
+    # ৫ মিনিট পার হওয়ার পর যদি OTP না আসে তবে অটো-ক্যানসেল হবে
+    if id_num in active_orders:
+        set_number_status(id_num, "bad")
+        active_orders.pop(id_num, None)
+        try:
+            await context.bot.edit_message_text(
+                chat_id=user_id,
+                message_id=msg_id,
+                text=f"⌛ **𝙽𝚄𝙼𝙱𝙴𝚁 𝙲𝙰𝙽𝙲𝙴𝙻𝙻𝙴𝙳 𝙳𝚄𝙴 𝚃𝙾 𝚃𝙸𝙼𝙴𝙾𝚄𝚃 (𝟻 𝙼𝙸𝙽):** `{phone_num}`",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
 
 # Subscription Flow Updates (5 Days / 7 Days & bKash / Binance)
 async def sub_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
