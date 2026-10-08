@@ -98,6 +98,8 @@ def get_country_flag(country_code: str) -> str:
         return "🇭🇰"
     elif code == "cl":
         return "🇨🇱"
+    elif code == "id":
+        return "🇮🇩"
     return "🌐"
 
 def mask_number(phone_str: str) -> str:
@@ -339,9 +341,15 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"]:
         country_kb = [
             [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
+            [KeyboardButton("COUNTRY: INDONESIA 🇮🇩 (ID)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
         await update.message.reply_text("🌐 **SELECT YOUR COUNTRY:**", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
+        return
+
+    if "INDONESIA" in text.upper():
+        users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "id"}})
+        await update.message.reply_text("✅ Country set: `INDONESIA (ID)` 🇮🇩", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
     if "HK" in text:
@@ -390,7 +398,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         service = u_data.get("selected_service", "tg")
         country_flag = get_country_flag(country)
         
-        if country == "hk" and service == "wa":
+        if country == "id":
+            max_price_limit = 0.08
+        elif country == "hk" and service == "wa":
             max_price_limit = 0.07
         elif country == "cl" and service == "wa":
             max_price_limit = 0.079
