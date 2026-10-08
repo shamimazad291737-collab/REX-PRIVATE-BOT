@@ -88,10 +88,8 @@ SUB_PLAN_SELECT, SUB_METHOD_SELECT, SUB_AMOUNT, SUB_TXID, SUB_SCREENSHOT = range
     ADMIN_RATE_WA_CL_SET,
     ADMIN_RATE_TG_HK_SET,
     ADMIN_RATE_TG_CL_SET,
-    ADMIN_RATE_WA_ID_SET,
-    ADMIN_RATE_TG_ID_SET,
     ADMIN_BROADCAST,
-) = range(8, 20)
+) = range(8, 18)
 
 # Helper Functions
 def get_country_flag(country_code: str) -> str:
@@ -100,8 +98,6 @@ def get_country_flag(country_code: str) -> str:
         return "🇭🇰"
     elif code == "cl":
         return "🇨🇱"
-    elif code == "id":
-        return "🇮🇩"
     return "🌐"
 
 def mask_number(phone_str: str) -> str:
@@ -145,10 +141,8 @@ def get_rate(service_code: str = "tg", country_code: str = "hk"):
     defaults = {
         "wa_hk": 0.10,
         "wa_cl": 0.10,
-        "wa_id": 0.10,
         "tg_hk": 0.12,
-        "tg_cl": 0.12,
-        "tg_id": 0.12
+        "tg_cl": 0.12
     }
     return defaults.get(key, 0.10)
 
@@ -345,15 +339,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"]:
         country_kb = [
             [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
-            [KeyboardButton("COUNTRY: INDONESIA 🇮🇩 (ID)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
         await update.message.reply_text("🌐 **SELECT YOUR COUNTRY:**", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
-        return
-
-    if "INDONESIA" in text.upper():
-        users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "id"}})
-        await update.message.reply_text("✅ Country set: `INDONESIA (ID)` 🇮🇩", parse_mode="Markdown", reply_markup=get_main_keyboard(user_id))
         return
 
     if "HK" in text:
@@ -402,9 +390,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         service = u_data.get("selected_service", "tg")
         country_flag = get_country_flag(country)
         
-        if country == "id":
-            max_price_limit = 0.08
-        elif country == "hk" and service == "wa":
+        if country == "hk" and service == "wa":
             max_price_limit = 0.07
         elif country == "cl" and service == "wa":
             max_price_limit = 0.079
@@ -481,7 +467,6 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🚫 𝗕𝗔𝗡 𝗨𝗦𝗘𝗥", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
         [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
         [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
-        [InlineKeyboardButton("💵 SET ID WA PRICE", callback_data="admin_rate_wa_id_start"), InlineKeyboardButton("💵 SET ID TG PRICE", callback_data="admin_rate_tg_id_start")],
         [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 𝗭𝗘𝗥𝗢 𝗕𝙰𝙻𝙰𝙽𝙲𝙴", callback_data="admin_zero_bal_start")],
         [InlineKeyboardButton("📢 𝗕𝗥𝗢𝙳𝙲𝙰𝚂𝗧 𝙰🇱🇱", callback_data="admin_broadcast_start")],
         [InlineKeyboardButton(f"𝗕𝗢𝗧 𝗦𝗧𝗔𝗧𝗨𝗦: {status_str}", callback_data="admin_toggle_bot")]
@@ -533,7 +518,6 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🚫 𝗕𝗔𝗡 𝗨𝗦𝗘𝗥", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
             [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
             [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
-        [InlineKeyboardButton("💵 SET ID WA PRICE", callback_data="admin_rate_wa_id_start"), InlineKeyboardButton("💵 SET ID TG PRICE", callback_data="admin_rate_tg_id_start")],
             [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 𝗭𝗘𝗥𝗢 𝗕𝙰𝙻𝙰𝙽𝙲𝙴", callback_data="admin_zero_bal_start")],
             [InlineKeyboardButton("📢 𝗕𝗥𝗢𝙳𝙲𝙰𝚂𝗧 𝙰🇱🇱", callback_data="admin_broadcast_start")],
             [InlineKeyboardButton(f"𝗕𝗢𝗧 𝗦𝗧𝗔𝗧𝗨𝗦: {status_str}", callback_data="admin_toggle_bot")]
@@ -1014,36 +998,6 @@ async def admin_rate_tg_cl_process(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
 
-async def admin_rate_wa_id_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.message.reply_text("💵 **Indonesia (ID) WhatsApp (WA)-er notun Bot Rate USDT-te likhun (jemon: `0.075` ba `0.10`):**")
-    return ADMIN_RATE_WA_ID_SET
-
-async def admin_rate_wa_id_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        rate = float(update.message.text.strip())
-        set_rate("wa", "id", rate)
-        await update.message.reply_text(f"✅ Indonesia WA Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
-    return ConversationHandler.END
-
-async def admin_rate_tg_id_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.message.reply_text("💵 **Indonesia (ID) Telegram (TG)-er notun Bot Rate USDT-te likhun (jemon: `0.10` ba `0.12`):**")
-    return ADMIN_RATE_TG_ID_SET
-
-async def admin_rate_tg_id_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        rate = float(update.message.text.strip())
-        set_rate("tg", "id", rate)
-        await update.message.reply_text(f"✅ Indonesia TG Rate update kora hoyeche: `${rate}` USDT", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ Invalid Rate Format!")
-    return ConversationHandler.END
-
 # ADMIN BROADCAST HANDLERS
 async def admin_broadcast_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1174,18 +1128,6 @@ async def run_bot():
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
-    admin_rate_wa_id_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_wa_id_start, pattern="^admin_rate_wa_id_start$")],
-        states={ADMIN_RATE_WA_ID_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_id_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
-    admin_rate_tg_id_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(admin_rate_tg_id_start, pattern="^admin_rate_tg_id_start$")],
-        states={ADMIN_RATE_TG_ID_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_tg_id_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
-    )
-
     admin_broadcast_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$")],
         states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_process)]},
@@ -1203,8 +1145,6 @@ async def run_bot():
     app.add_handler(admin_rate_wa_cl_conv)
     app.add_handler(admin_rate_tg_hk_conv)
     app.add_handler(admin_rate_tg_cl_conv)
-    app.add_handler(admin_rate_wa_id_conv)
-    app.add_handler(admin_rate_tg_id_conv)
     app.add_handler(admin_broadcast_conv)
     app.add_handler(CallbackQueryHandler(handle_callbacks))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
