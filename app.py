@@ -778,7 +778,7 @@ async def admin_deposit_callback(update: Update, context: ContextTypes.DEFAULT_T
         except Exception:
             pass
 
-def main():
+async def start_bot():
     threading.Thread(target=run_flask, daemon=True).start()
 
     app = Application.builder().token(BOT_TOKEN).build()
@@ -831,7 +831,16 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_messages))
 
     logging.info("Starting Telegram Bot...")
-    app.run_polling()
+    
+    async with app:
+        await app.initialize()
+        await app.start()
+        await app.updater.start_polling()
+        # Keep bot running
+        await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(start_bot())
+    except (KeyboardInterrupt, SystemExit):
+        logging.info("Bot stopped.")
