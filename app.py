@@ -416,7 +416,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🚫 Cancel Number", callback_data=f"cancel_num_{id_num}")]
             ])
 
-            # Monospaced HTML formatting so tapping the number copies it
             sent_msg = await update.message.reply_text(
                 f"✅ NUMBER PURCHASED SUCCESSFULLY!\n\n"
                 f"📱 Number: <code>{phone_num}</code>\n"
@@ -501,20 +500,29 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "admin_daily_stats" and user_id == ADMIN_ID:
         try:
+            # Resets/Filters stats automatically after 00:00 AM (Midnight)
             today_str = datetime.now().strftime("%Y-%m-%d")
             logs = list(otp_logs_col.find({"date": today_str}))
             
             total_today = len(logs)
-            hk_count = sum(1 for log in logs if log.get("country", "").lower() == "hk")
-            cl_count = sum(1 for log in logs if log.get("country", "").lower() == "cl")
+            hk_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "hk")
+            cl_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "cl")
             other_count = total_today - (hk_count + cl_count)
             
+            wa_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "wa")
+            tg_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "tg")
+
             stats_msg = (
-                f"📊 TODAY OTP RECEIVED STATS ({today_str}):\n\n"
+                f"📊 TODAY OTP RECEIVED STATS ({today_str}):\n"
+                f"🕒 Auto-Reset Every Day at 12:00 AM\n\n"
                 f"📱 Total OTP Received Today: {total_today}\n"
+                f"────────────────────\n"
                 f"🇭🇰 Hong Kong (HK): {hk_count}\n"
                 f"🇨🇱 Chile (CL): {cl_count}\n"
-                f"🌐 Others: {other_count}"
+                f"🌐 Others: {other_count}\n"
+                f"────────────────────\n"
+                f"💬 WhatsApp (WA): {wa_count}\n"
+                f"✈️ Telegram (TG): {tg_count}"
             )
             await query.message.reply_text(stats_msg)
         except Exception as e:
@@ -557,13 +565,11 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             set_number_status(id_num, "bad")
             order_data = active_orders.pop(id_num, None)
             
-            # Delete bot's "buy number" message
             try:
                 await query.message.delete()
             except Exception:
                 pass
             
-            # Delete user's "BY NUMBER" command message
             if order_data and "user_msg_id" in order_data:
                 try:
                     await context.bot.delete_message(chat_id=user_id, message_id=order_data["user_msg_id"])
