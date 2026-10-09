@@ -172,7 +172,7 @@ def get_main_keyboard(user_id):
     keyboard = [
         [KeyboardButton("💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴"), KeyboardButton("🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁")],
         [KeyboardButton("🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"), KeyboardButton("📱 𝚂𝙴𝚃 𝚂𝙴𝚁𝚅𝙸𝙲𝙴")],
-        [KeyboardButton("👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴"), KeyboardButton("💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃")]
+        [KeyboardButton("👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴"), KeyboardButton("💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃")]
     ]
     if user_id == ADMIN_ID:
         keyboard.append([KeyboardButton("⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻")])
@@ -233,11 +233,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text("❌ BAN BY ADMIN CONTACT ADMIN.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("❌ BANNED BY ADMIN. PLEASE CONTACT ADMIN.", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
-        await update.message.reply_text("🚧 BOT UNDER MAINTAINING BY ADMIN. Please try some time.")
+        await update.message.reply_text("🚧 BOT UNDER MAINTENANCE BY ADMIN. Please try again later.")
         return
 
     if not is_subscribed(user_id):
@@ -247,12 +247,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ])
         msg = (
             f"👋 Hello {user.full_name}!\n\n"
-            f"❌ YOU DONT HAVE SUBSCRIPTION FOR THE BOT!\n"
+            f"❌ YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION FOR THE BOT!\n"
             f"Bot bebohar korte chaile subscription nite hobe.\n\n"
             f"📌 PRICE & VALIDITY (Rate: 125 Tk/$) :\n"
             f"• 5 Days = 50 Tk (or 0.40 USDT)\n"
             f"• 7 Days = 70 Tk (or 0.56 USDT)\n\n"
-            f"Nicher button theke click kore subscription kinun:"
+            f"Nicher button-e click kore subscription kinun:"
         )
         await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("👇 BUY SUBSCRIPTION:", reply_markup=sub_kb)
@@ -267,13 +267,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     curr_service = u_data.get("selected_service", "tg").upper()
 
     welcome_msg = (
-        f"👋 WELCOME REX PRIVATE BOT!\n\n"
+        f"👋 WELCOME TO REX PRIVATE BOT!\n\n"
         f"⚙️ RECENT SETUP:\n"
         f"• COUNTRIES: {curr_country} {country_flag}\n"
         f"• Service: {curr_service}\n"
         f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT\n"
         f"• SUBSCRIPTION VALID TILL: {exp_str}\n\n"
-        f"Kaj korte niche dea menu use karen:"
+        f"Kaj korte niche dewa menu use korun:"
     )
     await update.message.reply_text(welcome_msg, reply_markup=get_main_keyboard(user_id))
 
@@ -288,7 +288,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
-        await update.message.reply_text("🚧 BOT UNDER MAINTAIN BY ADMIN. Try again after some time.")
+        await update.message.reply_text("🚧 BOT UNDER MAINTENANCE BY ADMIN. Try again after some time.")
         return
 
     if not is_subscribed(user_id):
@@ -374,7 +374,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_has_active = any(order.get("user_id") == user_id for order in active_orders.values())
         if user_has_active:
             await update.message.reply_text(
-                "⚠️ অলরেডি একটি নম্বর কেনা রয়েছে!\nনতুন নম্বর কেনার আগে আগের নম্বরটি ব্যবহার সম্পন্ন করুন অথবা Cancel করুন."
+                "⚠️ Allready ekta number kena royeche!\nNotun number kenar age ager number-ti bebohar somponno korun othoba Cancel korun."
             )
             return
 
@@ -416,14 +416,16 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🚫 Cancel Number", callback_data=f"cancel_num_{id_num}")]
             ])
 
+            # Monospaced HTML formatting so tapping the number copies it
             sent_msg = await update.message.reply_text(
-                f"✅ NUMBER PURCHASED SUCCESSFUL!\n\n"
-                f"📱 Number: {phone_num}\n"
+                f"✅ NUMBER PURCHASED SUCCESSFULLY!\n\n"
+                f"📱 Number: <code>{phone_num}</code>\n"
                 f"🆔 ID Num: {id_num}\n"
                 f"🌍 Country: {country.upper()} {country_flag}\n"
                 f"💬 Service: {service.upper()}\n"
                 f"💵 Rate: {bot_rate} USDT (OTP ASLEI BALANCE KATBE)\n\n"
-                f"⏳ OTP POWER JONNO OPEK KORUN...",
+                f"⏳ OTP POWAR JONNO OPEK KHA KORUN...",
+                parse_mode="HTML",
                 reply_markup=inline_kb
             )
 
@@ -433,7 +435,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "country": country,
                 "cost": bot_rate,
                 "phone": phone_num,
-                "msg_id": sent_msg.message_id
+                "msg_id": sent_msg.message_id,
+                "user_msg_id": update.message.message_id
             }
 
             try:
@@ -552,11 +555,20 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         id_num = data.split("_")[2]
         if id_num in active_orders:
             set_number_status(id_num, "bad")
-            active_orders.pop(id_num, None)
+            order_data = active_orders.pop(id_num, None)
+            
+            # Delete bot's "buy number" message
             try:
                 await query.message.delete()
             except Exception:
                 pass
+            
+            # Delete user's "BY NUMBER" command message
+            if order_data and "user_msg_id" in order_data:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=order_data["user_msg_id"])
+                except Exception:
+                    pass
         else:
             try:
                 await query.message.delete()
@@ -630,8 +642,8 @@ async def process_otp_success(context, id_num: str, otp: str):
 
     success_text = (
         f"✅ OTP RECEIVE SUCCESSFUL!\n\n"
-        f"📱 NUMBER: {phone}\n"
-        f"🔑 OTP CODE: {otp}\n\n"
+        f"📱 NUMBER: <code>{phone}</code>\n"
+        f"🔑 OTP CODE: <code>{otp}</code>\n\n"
         f"💵 BALANCE DEDUCTED: {cost} USDT\n"
         f"💰 REMAINING BALANCE: {rem_bal:.4f} USDT"
     )
@@ -640,10 +652,11 @@ async def process_otp_success(context, id_num: str, otp: str):
         await context.bot.edit_message_text(
             chat_id=uid,
             message_id=msg_id,
-            text=success_text
+            text=success_text,
+            parse_mode="HTML"
         )
     except Exception:
-        await context.bot.send_message(chat_id=uid, text=success_text)
+        await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="HTML")
 
     masked_phone = mask_number(phone)
     group_forward_msg = (
@@ -722,7 +735,7 @@ async def sub_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"💰 AMOUNT: {price} Tk\n\n"
             f"👇 SEND BKASH PERSONAL NUMBER:\n"
             f"📱 BKASH NUMBER: {ADMIN_BKASH}\n\n"
-            f"Taka dea sese TrxID-ti likhe pathan:"
+            f"Taka dewa sese TrxID-ti likhe pathan:"
         )
         await query.message.reply_text(msg, reply_markup=cancel_kb)
         return SUB_TXID
@@ -785,7 +798,7 @@ async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("💛 Binance Pay", callback_data="pay_binance")],
         [InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]
     ])
-    await update.message.reply_text("💳 Payment Method select korunk:", reply_markup=payment_kb)
+    await update.message.reply_text("💳 Payment Method select korun:", reply_markup=payment_kb)
     return WAITING_AMOUNT
 
 async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1078,7 +1091,7 @@ async def run_bot():
     )
 
     deposit_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙸𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
+        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
         states={
             WAITING_AMOUNT: [
                 CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$"),
