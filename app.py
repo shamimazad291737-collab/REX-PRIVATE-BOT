@@ -311,7 +311,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg)
         return
 
-    if text == "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴":
+    if text == "👤 𝙼𝚈 𝙿𝙾𝚁𝙵𝙸𝙻𝙴" or text == "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴":
         bot_bal = u_data.get("balance", 0.0)
         otp_cnt = u_data.get("otp_count", 0)
         exp_time = u_data.get("subscription_expiry")
@@ -457,7 +457,6 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
     admin_kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
-        [InlineKeyboardButton("📅 PAST STATS HISTORY", callback_data="admin_past_stats_start")],
         [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
         [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
         [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
@@ -501,22 +500,46 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "admin_daily_stats" and user_id == ADMIN_ID:
         try:
-            # Resets/Filters stats automatically after 00:00 AM (Midnight)
+            # Databse theke shob unique dates collect korchi jate ager tarikhgulo o dekha jay
+            all_dates = otp_logs_col.distinct("date")
+            all_dates = sorted(all_dates, reverse=True) # Recent tarikh age thakbe
+
+            if not all_dates:
+                await query.message.reply_text("📊 Kono OTP log ekhono nei.")
+                return
+
             today_str = datetime.now().strftime("%Y-%m-%d")
-            logs = list(otp_logs_col.find({"date": today_str}))
             
-            total_today = len(logs)
+            # Date wise report button dynamic vabe toiri hocche (Shesh 10 diner)
+            dates_kb = []
+            for d in all_dates[:10]:
+                label = f"📅 Date: {d} {'(Today)' if d == today_str else ''}"
+                dates_kb.append([InlineKeyboardButton(label, callback_data=f"view_stats_{d}")])
+
+            await query.message.reply_text(
+                "📊 DAILY OTP STATS ARCHIVE\n\n"
+                "Nicher tarikh (date) gulo theke click kore jekono diner report dekhte paren:",
+                reply_markup=InlineKeyboardMarkup(dates_kb)
+            )
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error generating stats: {str(e)}")
+
+    elif data.startswith("view_stats_") and user_id == ADMIN_ID:
+        target_date = data.split("_")[2]
+        try:
+            logs = list(otp_logs_col.find({"date": target_date}))
+            
+            total_count = len(logs)
             hk_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "hk")
             cl_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "cl")
-            other_count = total_today - (hk_count + cl_count)
+            other_count = total_count - (hk_count + cl_count)
             
             wa_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "wa")
             tg_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "tg")
 
             stats_msg = (
-                f"📊 TODAY OTP RECEIVED STATS ({today_str}):\n"
-                f"🕒 Auto-Reset Every Day at 12:00 AM\n\n"
-                f"📱 Total OTP Received Today: {total_today}\n"
+                f"📊 OTP STATS FOR {target_date}:\n\n"
+                f"📱 Total OTP Received: {total_count}\n"
                 f"────────────────────\n"
                 f"🇭🇰 Hong Kong (HK): {hk_count}\n"
                 f"🇨🇱 Chile (CL): {cl_count}\n"
@@ -527,50 +550,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             await query.message.reply_text(stats_msg)
         except Exception as e:
-            await query.message.reply_text(f"❌ Error generating stats: {str(e)}")
-
-    elif data == "admin_past_stats_start" and user_id == ADMIN_ID:
-        try:
-            pipeline = [
-                {
-                    "$group": {
-                        "_id": "$date",
-                        "total": {"$sum": 1},
-                        "hk_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$country"}, "hk"]}, 1, 0]}},
-                        "cl_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$country"}, "cl"]}, 1, 0]}},
-                        "wa_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$service"}, "wa"]}, 1, 0]}},
-                        "tg_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$service"}, "tg"]}, 1, 0]}}
-                    }
-                },
-                {"$sort": {"_id": -1}}
-            ]
-            
-            history_logs = list(otp_logs_col.aggregate(pipeline))
-            
-            if not history_logs:
-                await query.message.reply_text("📂 Kono purono OTP logs pawa jayni.")
-                return
-                
-            msg = "📊 PAST DAYS OTP RECEIVED HISTORY:\n\n"
-            for log in history_logs:
-                dt = log["_id"]
-                tot = log["total"]
-                hk = log["hk_count"]
-                cl = log["cl_count"]
-                wa = log["wa_count"]
-                tg = log["tg_count"]
-                
-                msg += (
-                    f"📅 Date: <b>{dt}</b>\n"
-                    f"• Total OTP: {tot}\n"
-                    f"• 🇭🇰 HK: {hk} | 🇨🇱 CL: {cl}\n"
-                    f"• 💬 WA: {wa} | ✈️ TG: {tg}\n"
-                    f"────────────────────\n"
-                )
-            
-            await query.message.reply_text(msg, parse_mode="HTML")
-        except Exception as e:
-            await query.message.reply_text(f"❌ Error loading history: {str(e)}")
+            await query.message.reply_text(f"❌ Error loading stats for {target_date}: {str(e)}")
 
     elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
         current_status = is_bot_active()
@@ -581,7 +561,6 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
         admin_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
-            [InlineKeyboardButton("📅 PAST STATS HISTORY", callback_data="admin_past_stats_start")],
             [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
             [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
             [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
@@ -1244,4 +1223,4 @@ def main():
         loop.close()
 
 if __name__ == "__main__":
-main()
+    main()
