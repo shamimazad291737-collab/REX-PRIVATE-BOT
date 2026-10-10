@@ -39,10 +39,16 @@ BINANCE_ID = os.getenv("BINANCE_ID", "907194603")
 ADMIN_BKASH = "01858582881"
 MONGODB_URI = os.getenv("MONGODB_URI")
 
-# MongoDB Setup
+# MongoDB Setup (Optimized for Speed)
 if not MONGODB_URI:
     logging.error("❌ MONGODB_URI Environment Variable missing!")
-client = MongoClient(MONGODB_URI)
+client = MongoClient(
+    MONGODB_URI,
+    maxPoolSize=50,
+    wtimeoutMS=2500,
+    connectTimeoutMS=5000,
+    serverSelectionTimeoutMS=5000
+)
 db = client["vaksms_bot_db"]
 
 users_col = db["users"]
@@ -500,9 +506,8 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "admin_daily_stats" and user_id == ADMIN_ID:
         try:
-            # Databse theke shob unique dates collect korchi jate ager tarikhgulo o dekha jay
             all_dates = otp_logs_col.distinct("date")
-            all_dates = sorted(all_dates, reverse=True) # Recent tarikh age thakbe
+            all_dates = sorted(all_dates, reverse=True)
 
             if not all_dates:
                 await query.message.reply_text("📊 Kono OTP log ekhono nei.")
@@ -510,7 +515,6 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             today_str = datetime.now().strftime("%Y-%m-%d")
             
-            # Date wise report button dynamic vabe toiri hocche (Shesh 10 diner)
             dates_kb = []
             for d in all_dates[:10]:
                 label = f"📅 Date: {d} {'(Today)' if d == today_str else ''}"
