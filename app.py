@@ -457,6 +457,7 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
     admin_kb = InlineKeyboardMarkup([
         [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
+        [InlineKeyboardButton("📅 PAST STATS HISTORY", callback_data="admin_past_stats_start")],
         [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
         [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
         [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
@@ -528,6 +529,49 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             await query.message.reply_text(f"❌ Error generating stats: {str(e)}")
 
+    elif data == "admin_past_stats_start" and user_id == ADMIN_ID:
+        try:
+            pipeline = [
+                {
+                    "$group": {
+                        "_id": "$date",
+                        "total": {"$sum": 1},
+                        "hk_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$country"}, "hk"]}, 1, 0]}},
+                        "cl_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$country"}, "cl"]}, 1, 0]}},
+                        "wa_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$service"}, "wa"]}, 1, 0]}},
+                        "tg_count": {"$sum": {"$cond": [{"$eq": [{"$toLower": "$service"}, "tg"]}, 1, 0]}}
+                    }
+                },
+                {"$sort": {"_id": -1}}
+            ]
+            
+            history_logs = list(otp_logs_col.aggregate(pipeline))
+            
+            if not history_logs:
+                await query.message.reply_text("📂 Kono purono OTP logs pawa jayni.")
+                return
+                
+            msg = "📊 PAST DAYS OTP RECEIVED HISTORY:\n\n"
+            for log in history_logs:
+                dt = log["_id"]
+                tot = log["total"]
+                hk = log["hk_count"]
+                cl = log["cl_count"]
+                wa = log["wa_count"]
+                tg = log["tg_count"]
+                
+                msg += (
+                    f"📅 Date: <b>{dt}</b>\n"
+                    f"• Total OTP: {tot}\n"
+                    f"• 🇭🇰 HK: {hk} | 🇨🇱 CL: {cl}\n"
+                    f"• 💬 WA: {wa} | ✈️ TG: {tg}\n"
+                    f"────────────────────\n"
+                )
+            
+            await query.message.reply_text(msg, parse_mode="HTML")
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error loading history: {str(e)}")
+
     elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
         current_status = is_bot_active()
         new_status = not current_status
@@ -537,6 +581,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
         admin_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
+            [InlineKeyboardButton("📅 PAST STATS HISTORY", callback_data="admin_past_stats_start")],
             [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
             [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
             [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
@@ -1199,4 +1244,4 @@ def main():
         loop.close()
 
 if __name__ == "__main__":
-    main()
+main()
