@@ -3,7 +3,7 @@ import os
 import threading
 import asyncio
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from flask import Flask
 from pymongo import MongoClient
 from telegram import (
@@ -29,6 +29,12 @@ import requests
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
+
+# Timezone Definition for Bangladesh (UTC+6)
+BD_TIMEZONE = timezone(timedelta(hours=6))
+
+def get_bd_time():
+    return datetime.now(BD_TIMEZONE)
 
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -169,7 +175,7 @@ def is_subscribed(user_id: int) -> bool:
     user = get_user(user_id)
     if user and user.get("subscription_expiry"):
         expiry = user["subscription_expiry"]
-        if datetime.now() < expiry:
+        if get_bd_time().replace(tzinfo=None) < expiry:
             return True
     return False
 
@@ -483,7 +489,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "admin_view_users" and user_id == ADMIN_ID:
         try:
-            now = datetime.now()
+            now = get_bd_time().replace(tzinfo=None)
             subscribed_users = list(users_col.find({
                 "subscription_expiry": {"$gt": now}
             }))
@@ -507,14 +513,17 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "admin_daily_stats" and user_id == ADMIN_ID:
         try:
             all_dates = otp_logs_col.distinct("date")
+            today_str = get_bd_time().strftime("%Y-%m-%d")
+            
+            if today_str not in all_dates:
+                all_dates.append(today_str)
+
             all_dates = sorted(all_dates, reverse=True)
 
             if not all_dates:
                 await query.message.reply_text("📊 Kono OTP log ekhono nei.")
                 return
 
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            
             dates_kb = []
             for d in all_dates[:10]:
                 label = f"📅 Date: {d} {'(Today)' if d == today_str else ''}"
@@ -626,7 +635,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = int(data.split("_")[2])
         user_doc = users_col.find_one({"user_id": target_id})
         days = user_doc.get("sub_days", 5) if user_doc else 5
-        expiry_date = datetime.now() + timedelta(days=days)
+        expiry_date = get_bd_time().replace(tzinfo=None) + timedelta(days=days)
         users_col.update_one({"user_id": target_id}, {"$set": {"subscription_expiry": expiry_date}})
         await query.edit_message_caption(caption=query.message.caption + f"\n\n✅ Subscription Approved ({days} Days Active)!")
         
@@ -660,12 +669,13 @@ async def process_otp_success(context, id_num: str, otp: str):
     )
 
     try:
+        bd_now = get_bd_time()
         otp_logs_col.insert_one({
             "user_id": uid,
             "country": country_code,
             "service": service_type,
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "timestamp": datetime.now()
+            "date": bd_now.strftime("%Y-%m-%d"),
+            "timestamp": bd_now
         })
     except Exception as e:
         logging.error(f"Failed to log OTP: {e}")
