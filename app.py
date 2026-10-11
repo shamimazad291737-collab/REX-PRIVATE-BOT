@@ -95,9 +95,9 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
-        return '<tg-emoji emoji-id="5269657987219232606">🇭🇰</tg-emoji>' # Hong Kong Flag emoji from list
+        return '<tg-emoji emoji-id="5269657987219232606">🇭🇰</tg-emoji>'
     elif code == "cl":
-        return '<tg-emoji emoji-id="5377774889723798543">🇨🇱</tg-emoji>' # Chile Flag emoji from list
+        return '<tg-emoji emoji-id="5377774889723798543">🇨🇱</tg-emoji>'
     return '<tg-emoji emoji-id="5244837092042750681">🌐</tg-emoji>'
 
 def mask_number(phone_str: str) -> str:
@@ -1241,7 +1241,7 @@ async def run_bot():
     admin_broadcast_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$")],
         states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_process)]},
-        fallbacks=[CallbackQueryHandler(callback_query, pattern="^cancel_flow_cb$")] # Fixed minor handler fallback pattern
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     app.add_handler(CommandHandler("start", start))
