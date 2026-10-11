@@ -397,7 +397,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # SERVICE SELECTION
     if text == "📱 𝚂𝙴𝚃 𝚂𝙴器件":
         service_kb = [
-            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
+            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲E: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
             [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: WA (𝚆𝙷𝙰𝚃𝚂𝙰𝙿𝙿)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
@@ -455,8 +455,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             id_num = str(res["idNum"])
 
             inline_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📩 Check Active OTP", callback_data=f"check_otp_{id_num}")],
-                [InlineKeyboardButton("🚫 Cancel Number", callback_data=f"cancel_num_{id_num}")]
+                [InlineKeyboardButton("Check Active OTP", callback_data=f"check_otp_{id_num}")],
+                [InlineKeyboardButton("Cancel Number", callback_data=f"cancel_num_{id_num}")]
             ])
 
             sent_msg = await update.message.reply_text(
@@ -507,16 +507,7 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📢 BROADCAST ALL", callback_data="admin_broadcast_start")],
         [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
     ])
-    admin_text = (
-        f"Admin Control Panel: {E_ADMIN_HEADER}\n"
-        f"VIEW ALL USER {E_VIEW_USER}\n"
-        f"DAILY STATS {E_STATS}\n"
-        f"BAN USER {E_BAN}\n"
-        f"UNBAN USER {E_UNBAN}\n"
-        f"ADD BALANCE {E_ADD_BAL}\n"
-        f"ZERO BALANCE {E_ZERO_BAL}\n"
-        f"BROADCAST {E_BROADCAST}"
-    )
+    admin_text = f"{E_ADMIN_HEADER}"
     if update.message:
         await update.message.reply_text(admin_text, parse_mode="HTML", reply_markup=admin_kb)
     elif update.callback_query:
@@ -781,8 +772,7 @@ async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     msg = (
         f"Payment Method select korun: {E_PAY_SELECT}\n"
-        f"Binance pay {E_BINANCE}\n\n"
-        f"Cancel {E_CANCEL}"
+        f"Binance pay {E_BINANCE}"
     )
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=payment_kb)
     return WAITING_AMOUNT
