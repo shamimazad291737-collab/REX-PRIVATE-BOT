@@ -47,7 +47,7 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 
 # MongoDB Setup
 if not MONGODB_URI:
-    logging.error("MONGODB_URI Environment Variable missing!")
+    logging.error("❌ MONGODB_URI Environment Variable missing!")
 client = MongoClient(
     MONGODB_URI,
     maxPoolSize=50,
@@ -108,8 +108,10 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
+# In-Memory Active Orders
 active_orders = {}
 
+# Conversation States
 WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
 SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 (
@@ -125,6 +127,7 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
     ADMIN_BROADCAST,
 ) = range(7, 17)
 
+# Helper Functions
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
@@ -169,14 +172,25 @@ def get_or_create_user(user_id: int, full_name: str = "User"):
 def get_rate(service_code: str = "wa", country_code: str = "cl"):
     doc = settings_col.find_one({"type": "rates"})
     key = f"{service_code.lower()}_{country_code.lower()}"
+    
     if doc and "rates" in doc and key in doc["rates"]:
         return float(doc["rates"][key])
-    defaults = {"wa_hk": 0.09, "wa_cl": 0.09, "tg_hk": 0.12, "tg_cl": 0.12}
+    
+    defaults = {
+        "wa_hk": 0.09,
+        "wa_cl": 0.09,
+        "tg_hk": 0.12,
+        "tg_cl": 0.12
+    }
     return defaults.get(key, 0.09)
 
 def set_rate(service_code: str, country_code: str, rate: float):
     key = f"{service_code.lower()}_{country_code.lower()}"
-    settings_col.update_one({"type": "rates"}, {"$set": {f"rates.{key}": rate}}, upsert=True)
+    settings_col.update_one(
+        {"type": "rates"},
+        {"$set": {f"rates.{key}": rate}},
+        upsert=True
+    )
 
 def is_bot_active() -> bool:
     doc = settings_col.find_one({"type": "bot_status"})
@@ -185,7 +199,11 @@ def is_bot_active() -> bool:
     return True
 
 def set_bot_active(status: bool):
-    settings_col.update_one({"type": "bot_status"}, {"$set": {"is_active": status}}, upsert=True)
+    settings_col.update_one(
+        {"type": "bot_status"},
+        {"$set": {"is_active": status}},
+        upsert=True
+    )
 
 def is_subscribed(user_id: int) -> bool:
     if user_id == ADMIN_ID:
@@ -197,16 +215,18 @@ def is_subscribed(user_id: int) -> bool:
             return True
     return False
 
+# Keyboards
 def get_main_keyboard(user_id):
     keyboard = [
-        [KeyboardButton("ACCOUNT BALANCE"), KeyboardButton("BY NUMBER")],
-        [KeyboardButton("SET COUNTRIES"), KeyboardButton("SET SERVICE")],
-        [KeyboardButton("MY PROFILE"), KeyboardButton("DEPOSIT")]
+        [KeyboardButton("💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴"), KeyboardButton("🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁")],
+        [KeyboardButton("🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"), KeyboardButton("📱 𝚂𝙴𝚃 𝚂𝙴𝚁𝚅𝙸𝙲𝙴")],
+        [KeyboardButton("👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴"), KeyboardButton("💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃")]
     ]
     if user_id == ADMIN_ID:
-        keyboard.append([KeyboardButton("ADMIN PANEL")])
+        keyboard.append([KeyboardButton("⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻")])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
+# VAK-SMS API Functions
 def set_number_status(id_num: str, status: str):
     url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
@@ -218,8 +238,10 @@ def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 
     url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice={max_price}"
     try:
         res = requests.get(url).json()
+        
         if isinstance(res, dict) and res.get("error") == "noNumber":
             return {"error": "Stock Out!"}
+            
         if isinstance(res, dict) and "tel" in res and "idNum" in res:
             assigned_price = res.get("price")
             if assigned_price is not None:
@@ -231,6 +253,7 @@ def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 
                         return {"error": "Stock Out!"}
                 except ValueError:
                     pass
+
         return res
     except Exception as e:
         return {"error": "Stock Out!"}
@@ -250,13 +273,15 @@ def fetch_otp_code(id_num: str):
     except Exception as e:
         return {"error": str(e)}
 
+# Handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
+
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text(f"{P_BAN} BANNED BY ADMIN.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"BANNED BY ADMIN. {P_BAN}", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
@@ -268,7 +293,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
             [InlineKeyboardButton("7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
-        msg = f"Hello {user.full_name}!\n\n{P_BAN} <b>SUBSCRIPTION REQUIRED!</b>"
+        msg = (
+            f"Hello {user.full_name}!\n\n"
+            f"<b>YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION!</b> {P_BAN}\n"
+            f"Bot bebohar korte chaile subscription nite hobe."
+        )
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("BUY SUBSCRIPTION:", reply_markup=sub_kb)
         return
@@ -290,17 +319,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• Service: {curr_service} {service_icon}\n"
         f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT {P_BAL}\n"
         f"• SUBSCRIPTION VALID TILL: Unlimited (Admin) {P_SUB_VALID}\n\n"
-        f"Kaj korte niche dewa menu use korun:"
+        f"Kaj korte niche dewa menu use korun: {P_WELCOME}"
     )
     await update.message.reply_text(welcome_msg, parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
 
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
+
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text(f"{P_BAN} ACCOUNT BANNED.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"YOUR ACCOUNT HAS BEEN BANNED. {P_BAN}", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
@@ -312,7 +342,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     text = update.message.text.strip()
 
-    if text == "ACCOUNT BALANCE":
+    if text == "💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴":
         bot_bal = u_data.get("balance", 0.0)
         msg = f"<b>MY BALANCE:</b> {bot_bal:.4f} USDT {P_BAL}"
         if user_id == ADMIN_ID:
@@ -321,9 +351,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(msg, parse_mode="HTML")
         return
 
-    if text in ["MY PROFILE", "MY PORFILE"]:
+    if text in ["👤 𝙼𝚈 𝙿𝙾𝚁𝙵𝙸𝙻𝙴", "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴", "MY PROFILE", "MY PORFILE"]:
         bot_bal = u_data.get("balance", 0.0)
         otp_cnt = u_data.get("otp_count", 0)
+        
         profile_msg = (
             f"Apnar Profile Info: {P_PROFILE_HEADER}\n"
             f"User ID: {user_id} {P_ID}\n"
@@ -335,7 +366,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_msg, parse_mode="HTML")
         return
 
-    if text in ["SET COUNTRY", "SET COUNTRIES"]:
+    # COUNTRY SELECTION
+    if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂", "SET COUNTRY", "SET COUNTRIES"]:
         country_kb = [
             [KeyboardButton("COUNTRY: HK (HONG KONG)"), KeyboardButton("COUNTRY: CHILE (CL)")],
             [KeyboardButton("MAIN MENU")]
@@ -353,7 +385,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Country set: CHILE (CL) {P_CL} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
-    if text == "SET SERVICE":
+    # SERVICE SELECTION
+    if text in ["📱 𝚂𝙴𝚃 𝚂𝙴器件", "SET SERVICE"]:
         service_kb = [
             [KeyboardButton("SERVICE: TG (TELEGRAM)")],
             [KeyboardButton("SERVICE: WA (WHATSAPP)")],
@@ -372,28 +405,39 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"SERVICE SET: WHATSAPP (WA) {P_WA} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
-    if text == "MAIN MENU":
+    if text in ["🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄", "MAIN MENU"]:
         await start(update, context)
         return
 
-    if text == "BY NUMBER":
+    if text in ["🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁", "BY NUMBER"]:
         user_has_active = any(order.get("user_id") == user_id for order in active_orders.values())
         if user_has_active:
-            await update.message.reply_text("<b>Already ekti number active ache!</b>", parse_mode="HTML")
+            await update.message.reply_text(
+                f"<b>Already ekti number active ache!</b> {P_BAN}",
+                parse_mode="HTML"
+            )
             return
 
         country = u_data.get("selected_country", "cl")
         service = u_data.get("selected_service", "wa")
         country_flag = get_country_flag(country)
         service_icon = P_WA if service == "wa" else P_TG
+        
         bot_rate = get_rate(service_code=service, country_code=country)
         user_bal = u_data.get("balance", 0.0)
 
         if user_bal < bot_rate:
-            await update.message.reply_text(f"{P_BAN} <b>NOT ENOUGH BALANCE!</b>", parse_mode="HTML")
+            await update.message.reply_text(
+                f"<b>NOT ENOUGH BALANCE:</b> {bot_rate} USDT {P_BAN}",
+                parse_mode="HTML"
+            )
             return
 
-        status_msg = await update.message.reply_text(f"{country.upper()} {country_flag} BUYING NUMBER...", parse_mode="HTML")
+        status_msg = await update.message.reply_text(
+            f"{country.upper()} {country_flag} BUYING NUMBER...",
+            parse_mode="HTML"
+        )
+
         res = buy_vak_number(service=service, country=country, max_price=0.087)
 
         if isinstance(res, dict) and "tel" in res and "idNum" in res:
@@ -419,31 +463,44 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             active_orders[id_num] = {
-                "user_id": user_id, "service": service, "country": country,
-                "cost": bot_rate, "phone": phone_num, "msg_id": sent_msg.message_id,
+                "user_id": user_id,
+                "service": service,
+                "country": country,
+                "cost": bot_rate,
+                "phone": phone_num,
+                "msg_id": sent_msg.message_id,
                 "user_msg_id": update.message.message_id
             }
+
             try:
                 await status_msg.delete()
             except Exception:
                 pass
+
             asyncio.create_task(auto_check_otp(context, user_id, id_num, str(phone_num), sent_msg.message_id))
         else:
-            await update.message.reply_text(f"{P_BAN} Stock Out!", parse_mode="HTML")
+            err_msg = res.get("error", "Stock Out!") if isinstance(res, dict) else "Stock Out!"
+            await update.message.reply_text(f"{err_msg} {P_BAN}", parse_mode="HTML")
         return
 
-    if text == "ADMIN PANEL" and user_id == ADMIN_ID:
+    if text in ["⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻", "ADMIN PANEL"] and user_id == ADMIN_ID:
         await send_admin_panel(update, context)
         return
 
 async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     status_str = "ON" if is_bot_active() else "OFF"
     admin_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("USERS", callback_data="admin_view_users"), InlineKeyboardButton("STATS", callback_data="admin_daily_stats")],
-        [InlineKeyboardButton("BAN", callback_data="admin_ban_start"), InlineKeyboardButton("UNBAN", callback_data="admin_unban_start")],
-        [InlineKeyboardButton(f"STATUS: {status_str}", callback_data="admin_toggle_bot")]
+        [InlineKeyboardButton("VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("DAILY STATS", callback_data="admin_daily_stats")],
+        [InlineKeyboardButton("BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("Unban User", callback_data="admin_unban_start")],
+        [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
     ])
-    admin_text = f"Admin Control Panel: {P_ADMIN_HEADER}\nVIEW USERS {P_VIEW_USER}\nSTATS {P_STATS}\nBAN {P_BAN}\nUNBAN {P_UNBAN}"
+    admin_text = (
+        f"Admin Control Panel: {P_ADMIN_HEADER}\n"
+        f"VIEW ALL USER {P_VIEW_USER}\n"
+        f"DAILY STATS {P_STATS}\n"
+        f"BAN USER {P_BAN}\n"
+        f"UNBAN USER {P_UNBAN}"
+    )
     if update.message:
         await update.message.reply_text(admin_text, parse_mode="HTML", reply_markup=admin_kb)
     elif update.callback_query:
@@ -453,14 +510,16 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
+    user_id = query.from_user.id
 
     if data.startswith("check_otp_"):
         id_num = data.split("_")[2]
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
-            await process_otp_success(context, id_num, res["smsCode"])
+            otp = res["smsCode"]
+            await process_otp_success(context, id_num, otp)
         else:
-            await query.message.reply_text("AKHONO OTP ASENI!")
+            await query.message.reply_text(f"AKHONO OTP ASENI! {P_WAIT_OTP}")
 
     elif data.startswith("cancel_num_"):
         id_num = data.split("_")[2]
@@ -475,6 +534,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def process_otp_success(context, id_num: str, otp: str):
     if id_num not in active_orders:
         return
+
     order_info = active_orders.pop(id_num)
     uid = order_info["user_id"]
     cost = order_info["cost"]
@@ -482,8 +542,12 @@ async def process_otp_success(context, id_num: str, otp: str):
     msg_id = order_info["msg_id"]
     service_type = order_info.get("service", "wa").upper()
     country_code = order_info.get("country", "cl")
+    country_flag = get_country_flag(country_code)
 
-    users_col.update_one({"user_id": uid}, {"$inc": {"balance": -cost, "otp_count": 1}})
+    users_col.update_one(
+        {"user_id": uid},
+        {"$inc": {"balance": -cost, "otp_count": 1}}
+    )
     set_number_status(id_num, "end")
     updated_user = get_user(uid)
     rem_bal = updated_user.get("balance", 0.0) if updated_user else 0.0
@@ -495,15 +559,30 @@ async def process_otp_success(context, id_num: str, otp: str):
         f"Balance Deducted: {cost} USDT {P_BAL}\n"
         f"Remaining Balance: {rem_bal:.4f} USDT"
     )
+
     try:
-        await context.bot.edit_message_text(chat_id=uid, message_id=msg_id, text=success_text, parse_mode="HTML")
+        await context.bot.edit_message_text(
+            chat_id=uid,
+            message_id=msg_id,
+            text=success_text,
+            parse_mode="HTML"
+        )
     except Exception:
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="HTML")
 
-    group_forward_msg = f"COUNTRY: {country_code.upper()} {P_CL}\nNUMBER: {phone} {P_PHONE}\nOTP: {otp} {P_KEY_OTP}"
+    group_forward_msg = (
+        f"COUNTRY: {country_code.upper()} {country_flag}\n"
+        f"NUMBER: {phone} {P_PHONE}\n"
+        f"OTP: {otp} {P_KEY_OTP}"
+    )
+
     if OTP_GROUP_ID:
         try:
-            await context.bot.send_message(chat_id=OTP_GROUP_ID, text=group_forward_msg, parse_mode="HTML")
+            await context.bot.send_message(
+                chat_id=OTP_GROUP_ID,
+                text=group_forward_msg,
+                parse_mode="HTML"
+            )
         except Exception:
             pass
 
@@ -512,26 +591,33 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
         await asyncio.sleep(6)
         if id_num not in active_orders:
             break
+
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
-            await process_otp_success(context, id_num, res["smsCode"])
+            otp = res["smsCode"]
+            await process_otp_success(context, id_num, otp)
             break
 
 async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    payment_kb = InlineKeyboardMarkup([[InlineKeyboardButton("Binance Pay", callback_data="pay_binance")], [InlineKeyboardButton("Cancel", callback_data="cancel_flow_cb")]])
+    payment_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Binance Pay", callback_data="pay_binance")],
+        [InlineKeyboardButton("Cancel", callback_data="cancel_flow_cb")]
+    ])
     msg = f"Payment Method select korun: {P_PAY_SELECT}\nBinance Pay {P_BINANCE}"
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=payment_kb)
     return WAITING_AMOUNT
 
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
+
     deposit_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^DEPOSIT$"), deposit_start)],
+        entry_points=[MessageHandler(filters.Regex("^(💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃|DEPOSIT)$"), deposit_start)],
         states={
             WAITING_AMOUNT: [CallbackQueryHandler(lambda u, c: None, pattern="^pay_binance$")]
         },
         fallbacks=[CallbackQueryHandler(lambda u, c: ConversationHandler.END, pattern="^cancel_flow_cb$")]
     )
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(deposit_conv)
     app.add_handler(CallbackQueryHandler(handle_callbacks))
@@ -540,6 +626,7 @@ async def run_bot():
     async with app:
         await app.start()
         await app.updater.start_polling()
+        logging.info("Bot startup sequence completed. Polling started successfully.")
         await asyncio.Event().wait()
 
 def main():
