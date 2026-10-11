@@ -624,6 +624,21 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
         await query.message.reply_text(status_text)
 
+    # Simple Prompt Actions for Admin Panel
+    elif data == "admin_ban_start" and user_id == ADMIN_ID:
+        await query.message.reply_text("🚫 Ban korar jonno user er ID ti likhe pathan:")
+    elif data == "admin_unban_start" and user_id == ADMIN_ID:
+        await query.message.reply_text("✅ Unban korar jonno user er ID ti likhe pathan:")
+    elif data == "admin_add_bal_start" and user_id == ADMIN_ID:
+        await query.message.reply_text("➕ Balance add korar jonno User ID and Amount likhun (Example: 123456789 5.0):")
+    elif data == "admin_zero_bal_start" and user_id == ADMIN_ID:
+        await query.message.reply_text("🔄 Balance zero korar jonno User ID ti likhun:")
+    elif data.startswith("admin_rate_") and user_id == ADMIN_ID:
+        rate_key = data.replace("admin_rate_", "").replace("_start", "")
+        await query.message.reply_text(f"💵 Notun price set korar jonno rate ti likhun (Example: 0.10 for {rate_key.upper()}):")
+    elif data == "admin_broadcast_start" and user_id == ADMIN_ID:
+        await query.message.reply_text("📢 Sobai ke message pathanor jonno broadcast text-ti pathan:")
+
     elif data.startswith("check_otp_"):
         id_num = data.split("_")[2]
         res = fetch_otp_code(id_num)
