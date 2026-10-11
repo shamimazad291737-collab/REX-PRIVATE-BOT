@@ -67,6 +67,7 @@ def emoji(emoji_id: str, fallback: str = "✨") -> str:
 
 # Specific Emoji Mapping
 E_CL = emoji("5222350726340032308", "🇨🇱")
+E_HK = emoji("5292166459118606932", "🇭🇰")
 E_WA = emoji("5334759662677957452", "💬")
 E_SUB_VALID = emoji("5352638632278660622", "📅")
 E_WELCOME = emoji("5352838545826420397", "👋")
@@ -132,7 +133,7 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
-        return emoji("5269657987219232606", "🇭🇰")
+        return E_HK
     elif code == "cl":
         return E_CL
     return emoji("5244837092042750681", "🌐")
@@ -390,7 +391,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "HK" in text:
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "hk"}})
-        await update.message.reply_text(f"Country set: HONG KONG (HK) {emoji('5269657987219232606', '🇭🇰')} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+        await update.message.reply_text(f"Country set: HONG KONG (HK) {E_HK} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if "CHILE" in text or "CL" in text:
@@ -401,7 +402,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # SERVICE SELECTION
     if text == "📱 𝚂𝙴𝚃 𝚂𝙴器件":
         service_kb = [
-            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
+            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲E: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
             [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: WA (𝚆𝙷𝙰𝚃𝚂𝙰𝙿𝙿)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
@@ -739,12 +740,22 @@ async def process_otp_success(context, id_num: str, otp: str):
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="HTML")
 
     masked_phone = mask_number(phone)
-    group_forward_msg = (
-        f"COUNTRY: {country_code.upper()} 🇨🇱 {E_GROUP_HEADER_1}\n"
-        f"NUMBER: <code>{masked_phone}</code> {E_PHONE}\n"
-        f"OTP: <code>{otp}</code> {E_KEY_OTP}\n"
-        f"Message: YOUR {service_type} CODE: <code>{otp}</code> {E_GROUP_HEADER_2}"
-    )
+    
+    # Conditional formatting for group notification
+    if country_code.lower() == "hk":
+        group_forward_msg = (
+            f"🌐 COUNTRY: HK {E_HK}\n"
+            f"📱 NUMBER: <code>{masked_phone}</code>\n"
+            f"🔑 OTP: <code>{otp}</code>\n"
+            f"💬 Message: YOUR {service_type} CODE: <code>{otp}</code>"
+        )
+    else:
+        group_forward_msg = (
+            f"COUNTRY: CL {E_CL}\n"
+            f"NUMBER: <code>{masked_phone}</code> {E_PHONE}\n"
+            f"OTP: <code>{otp}</code> {E_KEY_OTP}\n"
+            f"Message: YOUR {service_type} CODE: <code>{otp}</code> {E_WA}"
+        )
 
     if OTP_GROUP_ID:
         try:
