@@ -780,6 +780,112 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
             await process_otp_success(context, id_num, otp)
             break
 
+# Subscription Purchase Flow Handlers
+async def sub_start_5(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 5}})
+    
+    pay_methods_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌸 bKash (50 Tk)", callback_data="pay_method_bkash")],
+        [InlineKeyboardButton("💛 Binance Pay (0.40 USDT)", callback_data="pay_method_binance")],
+        [InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]
+    ])
+    await query.message.reply_text("💳 Payment Method select korun (Plan: 5 Days - 50 Tk / 0.40 USDT):", reply_markup=pay_methods_kb)
+    return SUB_METHOD
+
+async def sub_start_7(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    users_col.update_one({"user_id": user_id}, {"$set": {"sub_days": 7}})
+    
+    pay_methods_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🌸 bKash (70 Tk)", callback_data="pay_method_bkash")],
+        [InlineKeyboardButton("💛 Binance Pay (0.56 USDT)", callback_data="pay_method_binance")],
+        [InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]
+    ])
+    await query.message.reply_text("💳 Payment Method select korun (Plan: 7 Days - 70 Tk / 0.56 USDT):", reply_markup=pay_methods_kb)
+    return SUB_METHOD
+
+async def sub_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    data = query.data
+    
+    user_doc = users_col.find_one({"user_id": user_id})
+    days = user_doc.get("sub_days", 5) if user_doc else 5
+    
+    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+    
+    if data == "pay_method_bkash":
+        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "bkash"}})
+        price = 50 if days == 5 else 70
+        msg = (
+            f"💰 Plan: <code>{days} Days</code>\n"
+            f"💰 Amount: <code>{price} Tk</code>\n\n"
+            f"👇 Send bKash Personal Number:\n"
+            f"📱 bKash Number: <code>{ADMIN_BKASH}</code>\n\n"
+            f"Taka dewa sese **TrxID**-ti likhe pathan:"
+        )
+        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
+        return SUB_TXID
+        
+    elif data == "pay_method_binance":
+        users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "binance"}})
+        usdt_amt = 0.40 if days == 5 else 0.56
+        msg = (
+            f"💰 Plan: <code>{days} Days</code>\n"
+            f"💰 Amount: <code>{usdt_amt}</code> USDT (Rate: 125 Tk/$)\n\n"
+            f"👇 Send Binance Pay ID:\n"
+            f"🆔 Binance Pay ID: <code>{BINANCE_ID}</code>\n\n"
+            f"Dollar pathanor por apnar **Order ID / TxID**-ti লিখে পাঠান:"
+        )
+        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
+        return SUB_TXID
+
+async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txid = update.message.text.strip()
+    context.user_data["sub_txid"] = txid
+    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+    await update.message.reply_text("📸 Ekhon apnar payment-er screenshot (Photo) Pathan:", reply_markup=cancel_kb)
+    return SUB_SCREENSHOT
+
+async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    photo = update.message.photo[-1]
+    txid = context.user_data.get("sub_txid")
+    user_doc = users_col.find_one({"user_id": user.id})
+    days = user_doc.get("sub_days", 5) if user_doc else 5
+    method = user_doc.get("sub_method", "bkash").upper()
+    
+    if method == "BKASH":
+        price_str = f"{50 if days == 5 else 70} Tk"
+    else:
+        price_str = f"{0.40 if days == 5 else 0.56} USDT"
+
+    admin_kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_sub_{user.id}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"reject_sub_{user.id}")
+        ]
+    ])
+
+    caption = (
+        f"🔔 Notun Subscription Request!\n\n"
+        f"👤 User: {user.full_name} (<code>{user.id}</code>)\n"
+        f"💳 Method: <code>{method}</code>\n"
+        f"📅 Plan: <code>{days} Days</code>\n"
+        f"💰 Amount: <code>{price_str}</code>\n"
+        f"🧾 TrxID / Order ID: <code>{txid}</code>"
+    )
+
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="HTML", reply_markup=admin_kb)
+    await update.message.reply_text("✅ Apnar subscription request admin-er kache pathano hoyeche! Admin approve korlei bot active hoye jaabe.")
+    return ConversationHandler.END
+
 # Admin Panel Conversation Handlers
 async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -1074,9 +1180,24 @@ async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Process batil kora hoyeche.")
     return ConversationHandler.END
 
-# Async Main Runner with All Admin & Deposit Handlers
+# Async Main Runner with All Admin, Subscription & Deposit Handlers
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
+
+    sub_conv = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(sub_start_5, pattern="^buy_sub_5$"),
+            CallbackQueryHandler(sub_start_7, pattern="^buy_sub_7$")
+        ],
+        states={
+            SUB_METHOD: [
+                CallbackQueryHandler(sub_method_selected, pattern="^pay_method_(bkash|binance)$")
+            ],
+            SUB_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, sub_txid_received)],
+            SUB_SCREENSHOT: [MessageHandler(filters.PHOTO, sub_screenshot_received)]
+        },
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
+    )
 
     deposit_conv = ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
@@ -1149,6 +1270,7 @@ async def run_bot():
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(sub_conv)
     app.add_handler(deposit_conv)
     app.add_handler(admin_ban_conv)
     app.add_handler(admin_unban_conv)
