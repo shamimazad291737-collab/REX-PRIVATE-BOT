@@ -95,10 +95,10 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
-        return "🇭🇰"
+        return '<tg-emoji emoji-id="5269657987219232606">🇭🇰</tg-emoji>' # Hong Kong Flag emoji from list
     elif code == "cl":
-        return "🇨🇱"
-    return "🌐"
+        return '<tg-emoji emoji-id="5377774889723798543">🇨🇱</tg-emoji>' # Chile Flag emoji from list
+    return '<tg-emoji emoji-id="5244837092042750681">🌐</tg-emoji>'
 
 def mask_number(phone_str: str) -> str:
     clean_num = re.sub(r"[^\d+]", "", str(phone_str))
@@ -245,7 +245,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text("❌ BANNED BY ADMIN. PLEASE CONTACT ADMIN.", reply_markup=ReplyKeyboardRemove())
+        err_banned = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+        await update.message.reply_text(f"{err_banned} BANNED BY ADMIN. PLEASE CONTACT ADMIN.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
@@ -257,16 +258,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
             [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
+        err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
         msg = (
             f"👋 Hello {user.full_name}!\n\n"
-            f"❌ YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION FOR THE BOT!\n"
+            f"{err_cross} <b>YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION FOR THE BOT!</b>\n"
             f"Bot bebohar korte chaile subscription nite hobe.\n\n"
             f"📌 PRICE & VALIDITY (Rate: 125 Tk/$) :\n"
             f"• 5 Days = 50 Tk (or 0.40 USDT)\n"
             f"• 7 Days = 70 Tk (or 0.56 USDT)\n\n"
             f"Nicher button-e click kore subscription kinun:"
         )
-        await update.message.reply_text(msg, reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("👇 BUY SUBSCRIPTION:", reply_markup=sub_kb)
         return
 
@@ -283,11 +285,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⚙️ RECENT SETUP:\n"
         f"• COUNTRIES: {curr_country} {country_flag}\n"
         f"• Service: {curr_service}\n"
-        f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT\n"
+        f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} <tg-emoji emoji-id=\"5409048419211682843\">💵</tg-emoji> USDT\n"
         f"• SUBSCRIPTION VALID TILL: {exp_str}\n\n"
         f"Kaj korte niche dewa menu use korun:"
     )
-    await update.message.reply_text(welcome_msg, reply_markup=get_main_keyboard(user_id))
+    await update.message.reply_text(welcome_msg, parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
 
 async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -296,7 +298,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text("❌ YOUR ACCOUNT HAS BEEN BANNED BY ADMIN.", reply_markup=ReplyKeyboardRemove())
+        err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+        await update.message.reply_text(f"{err_cross} YOUR ACCOUNT HAS BEEN BANNED BY ADMIN.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
@@ -308,7 +311,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
             [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
-        await update.message.reply_text("❌ SUBSCRIPTION EXPIRED! BUY NEW SUBSCRIPTION.", reply_markup=ReplyKeyboardRemove())
+        err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+        await update.message.reply_text(f"{err_cross} SUBSCRIPTION EXPIRED! BUY NEW SUBSCRIPTION.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         await update.message.reply_text("👇 BUY SUBSCRIPTION:", reply_markup=sub_kb)
         return
 
@@ -316,11 +320,13 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴":
         bot_bal = u_data.get("balance", 0.0)
-        msg = f"💰 MY BALANCE: {bot_bal:.4f} USDT"
+        dollar_emoji = '<tg-emoji emoji-id="5409048419211682843">💵</tg-emoji>'
+        msg = f"{dollar_emoji} <b>MY BALANCE:</b> {bot_bal:.4f} USDT"
         if user_id == ADMIN_ID:
             site_bal = get_vak_balance()
-            msg += f"\n🏦 PANEL BALANCE : {site_bal:.4f} USD"
-        await update.message.reply_text(msg)
+            bank_emoji = '<tg-emoji emoji-id="5282843764451195532">🏦</tg-emoji>'
+            msg += f"\n{bank_emoji} <b>PANEL BALANCE :</b> {site_bal:.4f} USD"
+        await update.message.reply_text(msg, parse_mode="HTML")
         return
 
     if text == "👤 𝙼𝚈 𝙿𝙾𝚁𝙵𝙸𝙻𝙴" or text == "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴":
@@ -328,15 +334,19 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         otp_cnt = u_data.get("otp_count", 0)
         exp_time = u_data.get("subscription_expiry")
         exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
+        profile_emoji = '<tg-emoji emoji-id="5240241223632954241">👤</tg-emoji>'
+        dollar_emoji = '<tg-emoji emoji-id="5409048419211682843">💵</tg-emoji>'
+        mail_emoji = '<tg-emoji emoji-id="5436113877181941026">📩</tg-emoji>'
+        
         profile_msg = (
-            f"👤 Apnar Profile Info:\n\n"
+            f"{profile_emoji} <b>Apnar Profile Info:</b>\n\n"
             f"🆔 User ID: {user_id}\n"
             f"📛 Name: {user.full_name}\n"
-            f"💵 Balance: {bot_bal:.4f} USDT\n"
-            f"📩 Total OTP Received: {otp_cnt}\n"
+            f"{dollar_emoji} Balance: {bot_bal:.4f} USDT\n"
+            f"{mail_emoji} Total OTP Received: {otp_cnt}\n"
             f"📅 Subscription Valid: {exp_str}"
         )
-        await update.message.reply_text(profile_msg)
+        await update.message.reply_text(profile_msg, parse_mode="HTML")
         return
 
     # COUNTRY SELECTION
@@ -350,12 +360,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "HK" in text:
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "hk"}})
-        await update.message.reply_text("✅ Country set: HONG KONG (HK) 🇭🇰", reply_markup=get_main_keyboard(user_id))
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Country set: HONG KONG (HK) 🇭🇰", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if "CHILE" in text or "CL" in text:
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "cl"}})
-        await update.message.reply_text("✅ Country set: CHILE (CL) 🇨🇱", reply_markup=get_main_keyboard(user_id))
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Country set: CHILE (CL) 🇨🇱", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     # SERVICE SELECTION
@@ -370,12 +382,14 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if "TG" in text or "TELEGRAM" in text.upper():
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": "tg"}})
-        await update.message.reply_text("✅ SERVICE SET: TELEGRAM (TG)", reply_markup=get_main_keyboard(user_id))
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} SERVICE SET: TELEGRAM (TG)", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if "WA" in text or "WHATSAPP" in text.upper():
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": "wa"}})
-        await update.message.reply_text("✅ SERVICE SET: WHATSAPP (WA)", reply_markup=get_main_keyboard(user_id))
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} SERVICE SET: WHATSAPP (WA)", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if text == "🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄":
@@ -385,8 +399,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁":
         user_has_active = any(order.get("user_id") == user_id for order in active_orders.values())
         if user_has_active:
+            warn_emoji = '<tg-emoji emoji-id="5416081784641168838">⚠️</tg-emoji>'
             await update.message.reply_text(
-                "⚠️ Allready ekta number kena royeche!\nNotun number kenar age ager number-ti bebohar somponno korun othoba Cancel korun."
+                f"{warn_emoji} <b>Allready ekta number kena royeche!</b>\nNotun number kenar age ager number-ti bebohar somponno korun othoba Cancel korun.",
+                parse_mode="HTML"
             )
             return
 
@@ -409,8 +425,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_bal = u_data.get("balance", 0.0)
 
         if user_bal < bot_rate:
+            err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
             await update.message.reply_text(
-                f"❌ SORRY NOT ENOUGH BALANCE: {bot_rate} USDT, YOUR BALANCE: {user_bal:.4f} USDT.\nPLEASE DEPOSIT."
+                f"{err_cross} <b>SORRY NOT ENOUGH BALANCE:</b> {bot_rate} USDT, YOUR BALANCE: {user_bal:.4f} USDT.\nPLEASE DEPOSIT.",
+                parse_mode="HTML"
             )
             return
 
@@ -428,8 +446,9 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("🚫 Cancel Number", callback_data=f"cancel_num_{id_num}")]
             ])
 
+            success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
             sent_msg = await update.message.reply_text(
-                f"✅ NUMBER PURCHASED SUCCESSFULLY!\n\n"
+                f"{success_check} <b>NUMBER PURCHASED SUCCESSFULLY!</b>\n\n"
                 f"📱 Number: <code>{phone_num}</code>\n"
                 f"🆔 ID Num: {id_num}\n"
                 f"🌍 Country: {country.upper()} {country_flag}\n"
@@ -458,7 +477,8 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             asyncio.create_task(auto_check_otp(context, user_id, id_num, str(phone_num), sent_msg.message_id))
         else:
             err_msg = res.get("error", "Stock Out!") if isinstance(res, dict) else "Stock Out!"
-            await update.message.reply_text(f"❌ {err_msg}")
+            err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+            await update.message.reply_text(f"{err_cross} {err_msg}", parse_mode="HTML")
         return
 
     if text == "⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻" and user_id == ADMIN_ID:
@@ -623,12 +643,14 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         target_id = int(parts[2])
         amount = float(parts[3])
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
-        await query.edit_message_caption(caption=query.message.caption + "\n\n✅ Approved & Balance Added!")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{success_check} Approved & Balance Added!", parse_mode="HTML")
         await context.bot.send_message(chat_id=target_id, text=f"🎉 Apnar {amount} USDT deposit shofolbhabe jukto kora hoyeche!")
 
     elif data.startswith("reject_dep_"):
         target_id = int(data.split("_")[2])
-        await query.edit_message_caption(caption=query.message.caption + "\n\n❌ Deposit Rejected!")
+        err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{err_cross} Deposit Rejected!", parse_mode="HTML")
         await context.bot.send_message(chat_id=target_id, text="❌ Apnar deposit request-ti batil kora hoyeche.")
 
     elif data.startswith("approve_sub_"):
@@ -637,7 +659,8 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         days = user_doc.get("sub_days", 5) if user_doc else 5
         expiry_date = get_bd_time().replace(tzinfo=None) + timedelta(days=days)
         users_col.update_one({"user_id": target_id}, {"$set": {"subscription_expiry": expiry_date}})
-        await query.edit_message_caption(caption=query.message.caption + f"\n\n✅ Subscription Approved ({days} Days Active)!")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{success_check} Subscription Approved ({days} Days Active)!", parse_mode="HTML")
         
         await context.bot.send_message(
             chat_id=target_id,
@@ -647,7 +670,8 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("reject_sub_"):
         target_id = int(data.split("_")[2])
-        await query.edit_message_caption(caption=query.message.caption + "\n\n❌ Subscription Rejected!")
+        err_cross = '<tg-emoji emoji-id="5206607081334906820">❌</tg-emoji>'
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{err_cross} Subscription Rejected!", parse_mode="HTML")
         await context.bot.send_message(chat_id=target_id, text="❌ Apnar subscription request-ti batil kora hoyeche.")
 
 async def process_otp_success(context, id_num: str, otp: str):
@@ -684,11 +708,13 @@ async def process_otp_success(context, id_num: str, otp: str):
     rem_bal = updated_user.get("balance", 0.0) if updated_user else 0.0
     set_number_status(id_num, "end")
 
+    success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+    dollar_emoji = '<tg-emoji emoji-id="5409048419211682843">💵</tg-emoji>'
     success_text = (
-        f"✅ OTP RECEIVE SUCCESSFUL!\n\n"
+        f"{success_check} <b>OTP RECEIVE SUCCESSFUL!</b>\n\n"
         f"📱 NUMBER: <code>{phone}</code>\n"
         f"🔑 OTP CODE: <code>{otp}</code>\n\n"
-        f"💵 BALANCE DEDUCTED: {cost} USDT\n"
+        f"{dollar_emoji} BALANCE DEDUCTED: {cost} USDT\n"
         f"💰 REMAINING BALANCE: {rem_bal:.4f} USDT"
     )
 
@@ -714,7 +740,8 @@ async def process_otp_success(context, id_num: str, otp: str):
         try:
             await context.bot.send_message(
                 chat_id=OTP_GROUP_ID,
-                text=group_forward_msg
+                text=group_forward_msg,
+                parse_mode="HTML"
             )
             logging.info(f"OTP Forwarded to Group {OTP_GROUP_ID} successfully.")
         except Exception as e:
@@ -774,27 +801,29 @@ async def sub_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE
     if data == "pay_method_bkash":
         users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "bkash"}})
         price = 50 if days == 5 else 70
+        bkash_emoji = '<tg-emoji emoji-id="5379947378671395461">🌸</tg-emoji>'
         msg = (
             f"💰 PLAN: {days} Days\n"
             f"💰 AMOUNT: {price} Tk\n\n"
             f"👇 SEND BKASH PERSONAL NUMBER:\n"
-            f"📱 BKASH NUMBER: {ADMIN_BKASH}\n\n"
+            f"📱 {bkash_emoji} BKASH NUMBER: {ADMIN_BKASH}\n\n"
             f"Taka dewa sese TrxID-ti likhe pathan:"
         )
-        await query.message.reply_text(msg, reply_markup=cancel_kb)
+        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
         return SUB_TXID
         
     elif data == "pay_method_binance":
         users_col.update_one({"user_id": user_id}, {"$set": {"sub_method": "binance"}})
         usdt_amt = 0.40 if days == 5 else 0.56
+        binance_emoji = '<tg-emoji emoji-id="5348469219761626211">💛</tg-emoji>'
         msg = (
             f"💰 PLAN: {days} Days\n"
             f"💰 AMOUNT: {usdt_amt} USDT (Rate: 125 Tk/$)\n\n"
             f"👇 SEND BINANCE PAY ID:\n"
-            f"🆔 BINANCE PAY ID: {BINANCE_ID}\n\n"
+            f"🆔 {binance_emoji} BINANCE PAY ID: {BINANCE_ID}\n\n"
             f"Dollar send korar por apnar Order ID / TxID-ti likhe pathan:"
         )
-        await query.message.reply_text(msg, reply_markup=cancel_kb)
+        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
         return SUB_TXID
 
 async def sub_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -833,8 +862,9 @@ async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_
         f"🧾 TRXID / ORDER ID: {txid}"
     )
 
-    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, reply_markup=admin_kb)
-    await update.message.reply_text("✅ Apnar subscription request admin-er kache pathano hoyeche! Admin approve korlei bot active hoye jaabe.")
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="HTML", reply_markup=admin_kb)
+    success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+    await update.message.reply_text(f"{success_check} Apnar subscription request admin-er kache pathano hoyeche! Admin approve korlei bot active hoye jaabe.", parse_mode="HTML")
     return ConversationHandler.END
 
 async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -861,16 +891,17 @@ async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_
             return WAITING_AMOUNT
 
         context.user_data["dep_amount"] = amount
+        binance_emoji = '<tg-emoji emoji-id="5348469219761626211">💛</tg-emoji>'
         
         msg = (
             f"💰 Deposit Amount: {amount} USDT\n\n"
             f"👇 Nicher Binance Pay ID-te Binance app theke Pay/Send Money Korun:\n"
-            f"🆔 Binance Pay ID: {BINANCE_ID}\n\n"
+            f"🆔 {binance_emoji} Binance Pay ID: {BINANCE_ID}\n\n"
             f"⚠️ Note: Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n\n"
             f"Dollar pathanor por apnar Order ID / TxID-ti likhe message din:"
         )
         cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
-        await update.message.reply_text(msg, reply_markup=cancel_kb)
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
         return WAITING_TXID
     except ValueError:
         cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
@@ -904,8 +935,9 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
         f"🧾 TxID: {txid}"
     )
 
-    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, reply_markup=admin_kb)
-    await update.message.reply_text("✅ Apnar deposit request admin-er kache pathano hoyeche! Jaachai kore druto balance jukto kora hobe.")
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="HTML", reply_markup=admin_kb)
+    success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+    await update.message.reply_text(f"{success_check} Apnar deposit request admin-er kache pathano hoyeche! Jaachai kore druto balance jukto kora hobe.", parse_mode="HTML")
     return ConversationHandler.END
 
 async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -930,7 +962,8 @@ async def admin_ban_process(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         uid = int(update.message.text.strip())
         users_col.update_one({"user_id": uid}, {"$set": {"is_banned": True}})
-        await update.message.reply_text(f"✅ User {uid}-ke banned kora hoyeche.")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} User {uid}-ke banned kora hoyeche.", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid User ID.")
     return ConversationHandler.END
@@ -945,7 +978,8 @@ async def admin_unban_process(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         uid = int(update.message.text.strip())
         users_col.update_one({"user_id": uid}, {"$set": {"is_banned": False}})
-        await update.message.reply_text(f"✅ User {uid}-ke unban kora hoyeche.")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} User {uid}-ke unban kora hoyeche.", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid User ID.")
     return ConversationHandler.END
@@ -975,7 +1009,8 @@ async def admin_add_bal_amt(update: Update, context: ContextTypes.DEFAULT_TYPE):
         u = get_user(uid)
         new_bal = u.get("balance", 0.0) if u else amt
         
-        await update.message.reply_text(f"✅ Successfully added {amt} USDT to User {uid}. Notun Balance: {new_bal:.4f} USDT")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Successfully added {amt} USDT to User {uid}. Notun Balance: {new_bal:.4f} USDT", parse_mode="HTML")
         await context.bot.send_message(chat_id=uid, text=f"🎉 Admin apnar account-e {amt} USDT balance add koreche!")
     except ValueError:
         await update.message.reply_text("❌ Invalid Amount.")
@@ -993,7 +1028,8 @@ async def admin_zero_bal_process(update: Update, context: ContextTypes.DEFAULT_T
         result = users_col.update_one({"user_id": uid}, {"$set": {"balance": 0.0}})
         
         if result.matched_count > 0:
-            await update.message.reply_text(f"✅ Successfully User {uid}-er balance 0 USDT kora hoyeche.")
+            success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+            await update.message.reply_text(f"{success_check} Successfully User {uid}-er balance 0 USDT kora hoyeche.", parse_mode="HTML")
             try:
                 await context.bot.send_message(chat_id=uid, text="⚠️ Admin apnar account-er balance 0 kore diyeche.")
             except Exception:
@@ -1015,7 +1051,8 @@ async def admin_rate_wa_hk_process(update: Update, context: ContextTypes.DEFAULT
     try:
         rate = float(update.message.text.strip())
         set_rate("wa", "hk", rate)
-        await update.message.reply_text(f"✅ Hong Kong WA Rate update kora hoyeche: {rate} USDT")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Hong Kong WA Rate update kora hoyeche: {rate} USDT", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
@@ -1030,7 +1067,8 @@ async def admin_rate_wa_cl_process(update: Update, context: ContextTypes.DEFAULT
     try:
         rate = float(update.message.text.strip())
         set_rate("wa", "cl", rate)
-        await update.message.reply_text(f"✅ Chile WA Rate update kora hoyeche: {rate} USDT")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Chile WA Rate update kora hoyeche: {rate} USDT", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
@@ -1045,7 +1083,8 @@ async def admin_rate_tg_hk_process(update: Update, context: ContextTypes.DEFAULT
     try:
         rate = float(update.message.text.strip())
         set_rate("tg", "hk", rate)
-        await update.message.reply_text(f"✅ Hong Kong TG Rate update kora hoyeche: {rate} USDT")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Hong Kong TG Rate update kora hoyeche: {rate} USDT", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
@@ -1060,7 +1099,8 @@ async def admin_rate_tg_cl_process(update: Update, context: ContextTypes.DEFAULT
     try:
         rate = float(update.message.text.strip())
         set_rate("tg", "cl", rate)
-        await update.message.reply_text(f"✅ Chile TG Rate update kora hoyeche: {rate} USDT")
+        success_check = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>'
+        await update.message.reply_text(f"{success_check} Chile TG Rate update kora hoyeche: {rate} USDT", parse_mode="HTML")
     except ValueError:
         await update.message.reply_text("❌ Invalid Rate Format!")
     return ConversationHandler.END
@@ -1201,7 +1241,7 @@ async def run_bot():
     admin_broadcast_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_broadcast_start, pattern="^admin_broadcast_start$")],
         states={ADMIN_BROADCAST: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, admin_broadcast_process)]},
-        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
+        fallbacks=[CallbackQueryHandler(callback_query, pattern="^cancel_flow_cb$")] # Fixed minor handler fallback pattern
     )
 
     app.add_handler(CommandHandler("start", start))
