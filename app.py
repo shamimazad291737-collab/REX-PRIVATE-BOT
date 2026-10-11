@@ -61,41 +61,38 @@ users_col = db["users"]
 settings_col = db["settings"]
 otp_logs_col = db["otp_logs"]
 
-# Helper Function for Premium Custom Emoji
-def prem_emoji(emoji_id: str) -> str:
-    return f'<tg-emoji emoji-id="{emoji_id}"></tg-emoji>'
+# Helper Emoji Generator Function
+def emoji(emoji_id: str, fallback: str = "✨") -> str:
+    return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
-# Premium Custom Emoji Mapping
-P_CL = prem_emoji("5222350726340032308")
-P_HK = prem_emoji("5269657987219232606")
-P_WA = prem_emoji("5334759662677957452")
-P_TG = prem_emoji("5289967092265660622")
-P_SUB_VALID = prem_emoji("5352638632278660622")
-P_WELCOME = prem_emoji("5352838545826420397")
-P_PHONE = prem_emoji("5269759232483303288")
-P_ID = prem_emoji("5841276284155467413")
-P_WAIT_OTP = prem_emoji("5215522595922779944")
-P_PAY_SELECT = prem_emoji("5256186332669035163")
-P_BINANCE = prem_emoji("5348212415077064131")
-P_BKASH = prem_emoji("5379947378671395461")
-P_CANCEL = prem_emoji("5240241223632954241")
-P_PROFILE_HEADER = prem_emoji("5352861489541714456")
-P_NAME = prem_emoji("5397916757333654639")
-P_BAL = prem_emoji("5409048419211682843")
-P_OTP_RCV = prem_emoji("5253742260054409879")
-P_SUB_EXP = prem_emoji("5413879192267805083")
-P_SELECT_SERVICE = prem_emoji("5231484622835063911")
-P_ADMIN_HEADER = prem_emoji("5424818078833715060")
-P_VIEW_USER = prem_emoji("5451882707875276247")
-P_STATS = prem_emoji("5231200819986047254")
-P_BAN = prem_emoji("5240241223632954241")
-P_UNBAN = prem_emoji("5206607081334906820")
-P_ADD_BAL = prem_emoji("5397916757333654639")
-P_ZERO_BAL = prem_emoji("5395695537687123235")
-P_BROADCAST = prem_emoji("5424818078833715060")
-P_GROUP_HEADER_1 = prem_emoji("5447410659077661506")
-P_KEY_OTP = prem_emoji("5282843764451195532")
-P_GLOBE = prem_emoji("5244837092042750681")
+# Specific Emoji Mapping from User Request
+E_CL = emoji("5222350726340032308", "🇨🇱")
+E_WA = emoji("5334759662677957452", "💬")
+E_SUB_VALID = emoji("5352638632278660622", "📅")
+E_WELCOME = emoji("5352838545826420397", "👋")
+E_PHONE = emoji("5269759232483303288", "📱")
+E_ID = emoji("5841276284155467413", "🆔")
+E_WAIT_OTP = emoji("5215522595922779944", "⏳")
+E_PAY_SELECT = emoji("5256186332669035163", "💳")
+E_BINANCE = emoji("5348212415077064131", "💛")
+E_CANCEL = emoji("5240241223632954241", "🚫")
+E_PROFILE_HEADER = emoji("5352861489541714456", "👤")
+E_NAME = emoji("5397916757333654639", "📛")
+E_BAL = emoji("5409048419211682843", "💵")
+E_OTP_RCV = emoji("5253742260054409879", "📩")
+E_SUB_EXP = emoji("5413879192267805083", "📅")
+E_SELECT_SERVICE = emoji("5231484622835063911", "📱")
+E_ADMIN_HEADER = emoji("5424818078833715060", "🛠")
+E_VIEW_USER = emoji("5451882707875276247", "👥")
+E_STATS = emoji("5231200819986047254", "📊")
+E_BAN = emoji("5240241223632954241", "🚫")
+E_UNBAN = emoji("5206607081334906820", "✅")
+E_ADD_BAL = emoji("5397916757333654639", "➕")
+E_ZERO_BAL = emoji("5395695537687123235", "🔄")
+E_BROADCAST = emoji("5424818078833715060", "📢")
+E_GROUP_HEADER_1 = emoji("5447410659077661506", "🌐")
+E_GROUP_HEADER_2 = emoji("5334759662677957452", "💬")
+E_KEY_OTP = emoji("5282843764451195532", "🔑")
 
 # Flask Web Server
 flask_app = Flask("")
@@ -131,10 +128,10 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
-        return P_HK
+        return emoji("5269657987219232606", "🇭🇰")
     elif code == "cl":
-        return P_CL
-    return P_GLOBE
+        return E_CL
+    return emoji("5244837092042750681", "🌐")
 
 def mask_number(phone_str: str) -> str:
     clean_num = re.sub(r"[^\d+]", "", str(phone_str))
@@ -281,25 +278,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text(f"BANNED BY ADMIN. {P_BAN}", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"{E_BAN} BANNED BY ADMIN. PLEASE CONTACT ADMIN.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
-        await update.message.reply_text("BOT UNDER MAINTENANCE BY ADMIN.")
+        await update.message.reply_text("🚧 BOT UNDER MAINTENANCE BY ADMIN. Please try again later.")
         return
 
     if not is_subscribed(user_id):
         sub_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
-            [InlineKeyboardButton("7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
+            [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
+            [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
         ])
         msg = (
-            f"Hello {user.full_name}!\n\n"
-            f"<b>YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION!</b> {P_BAN}\n"
-            f"Bot bebohar korte chaile subscription nite hobe."
+            f"👋 Hello {user.full_name}!\n\n"
+            f"{E_BAN} <b>YOU DO NOT HAVE AN ACTIVE SUBSCRIPTION FOR THE BOT!</b>\n"
+            f"Bot bebohar korte chaile subscription nite hobe.\n\n"
+            f"📌 PRICE & VALIDITY (Rate: 125 Tk/$) :\n"
+            f"• 5 Days = 50 Tk (or 0.40 USDT)\n"
+            f"• 7 Days = 70 Tk (or 0.56 USDT)\n\n"
+            f"Nicher button-e click kore subscription kinun:"
         )
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
-        await update.message.reply_text("BUY SUBSCRIPTION:", reply_markup=sub_kb)
+        await update.message.reply_text("👇 BUY SUBSCRIPTION:", reply_markup=sub_kb)
         return
 
     exp_time = u_data.get("subscription_expiry")
@@ -309,17 +310,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     curr_country = curr_country_code.upper()
     country_flag = get_country_flag(curr_country_code)
     curr_service_code = u_data.get("selected_service", "wa").lower()
-    service_icon = P_WA if curr_service_code == "wa" else P_TG
+    service_icon = E_WA if curr_service_code == "wa" else emoji("5289967092265660622", "✈️")
     curr_service = curr_service_code.upper()
 
     welcome_msg = (
-        f"WELCOME TO REX PRIVATE BOT! {P_WELCOME}\n\n"
-        f"RECENT SETUP:\n"
+        f"👋 WELCOME TO REX PRIVATE BOT! {E_WELCOME}\n\n"
+        f"⚙️ RECENT SETUP:\n"
         f"• COUNTRIES: {curr_country} {country_flag}\n"
         f"• Service: {curr_service} {service_icon}\n"
-        f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT {P_BAL}\n"
-        f"• SUBSCRIPTION VALID TILL: Unlimited (Admin) {P_SUB_VALID}\n\n"
-        f"Kaj korte niche dewa menu use korun: {P_WELCOME}"
+        f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT {E_BAL}\n"
+        f"• SUBSCRIPTION VALID TILL: Unlimited (Admin) {E_SUB_VALID}\n\n"
+        f"Kaj korte niche dewa menu use korun:"
     )
     await update.message.reply_text(welcome_msg, parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
 
@@ -330,90 +331,98 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     u_data = get_or_create_user(user_id, user.full_name)
 
     if u_data.get("is_banned", False):
-        await update.message.reply_text(f"YOUR ACCOUNT HAS BEEN BANNED. {P_BAN}", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(f"{E_BAN} YOUR ACCOUNT HAS BEEN BANNED BY ADMIN.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         return
 
     if not is_bot_active() and user_id != ADMIN_ID:
-        await update.message.reply_text("BOT UNDER MAINTENANCE.")
+        await update.message.reply_text("🚧 BOT UNDER MAINTENANCE BY ADMIN. Try again after some time.")
         return
 
     if not is_subscribed(user_id):
+        sub_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("💳 5 Days (50 Tk / 0.40 USDT)", callback_data="buy_sub_5")],
+            [InlineKeyboardButton("💳 7 Days (70 Tk / 0.56 USDT)", callback_data="buy_sub_7")]
+        ])
+        await update.message.reply_text(f"{E_BAN} SUBSCRIPTION EXPIRED! BUY NEW SUBSCRIPTION.", parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("👇 BUY SUBSCRIPTION:", reply_markup=sub_kb)
         return
 
     text = update.message.text.strip()
 
     if text == "💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴":
         bot_bal = u_data.get("balance", 0.0)
-        msg = f"<b>MY BALANCE:</b> {bot_bal:.4f} USDT {P_BAL}"
+        msg = f"<b>MY BALANCE:</b> {bot_bal:.4f} USDT {E_BAL}"
         if user_id == ADMIN_ID:
             site_bal = get_vak_balance()
-            msg += f"\n<b>PANEL BALANCE:</b> {site_bal:.4f} USD"
+            msg += f"\n🏦 <b>PANEL BALANCE :</b> {site_bal:.4f} USD"
         await update.message.reply_text(msg, parse_mode="HTML")
         return
 
-    if text in ["👤 𝙼𝚈 𝙿𝙾𝚁𝙵𝙸𝙻𝙴", "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴", "MY PROFILE", "MY PORFILE"]:
+    if text in ["👤 𝙼𝚈 𝙿𝙾𝚁𝙵𝙸𝙻𝙴", "👤 𝙼𝚈 𝙿𝚁𝙾𝙵𝙸𝙻𝙴"]:
         bot_bal = u_data.get("balance", 0.0)
         otp_cnt = u_data.get("otp_count", 0)
+        exp_time = u_data.get("subscription_expiry")
+        exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
         
         profile_msg = (
-            f"Apnar Profile Info: {P_PROFILE_HEADER}\n"
-            f"User ID: {user_id} {P_ID}\n"
-            f"Name: {user.full_name} {P_NAME}\n"
-            f"Balance: {bot_bal:.4f} USDT {P_BAL}\n"
-            f"Total OTP Received: {otp_cnt} {P_OTP_RCV}\n"
-            f"Subscription Valid: Unlimited (Admin) {P_SUB_EXP}"
+            f"Apnar Profile Info: {E_PROFILE_HEADER}\n"
+            f"User ID: {user_id} {E_ID}\n"
+            f"Name: {user.full_name} {E_NAME}\n"
+            f"Balance: {bot_bal:.4f} USDT {E_BAL}\n"
+            f"Total OTP Received: {otp_cnt} {E_OTP_RCV}\n"
+            f"Subscription Valid: Unlimited (Admin) {E_SUB_EXP}"
         )
         await update.message.reply_text(profile_msg, parse_mode="HTML")
         return
 
     # COUNTRY SELECTION
-    if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂", "SET COUNTRY", "SET COUNTRIES"]:
+    if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"]:
         country_kb = [
-            [KeyboardButton("COUNTRY: HK (HONG KONG)"), KeyboardButton("COUNTRY: CHILE (CL)")],
-            [KeyboardButton("MAIN MENU")]
+            [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
+            [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
-        await update.message.reply_text(f"SELECT YOUR COUNTRY: {P_GLOBE}", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
+        await update.message.reply_text("🌐 SELECT YOUR COUNTRY:", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
         return
 
     if "HK" in text:
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "hk"}})
-        await update.message.reply_text(f"Country set: HONG KONG (HK) {P_HK} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+        await update.message.reply_text(f"Country set: HONG KONG (HK) {emoji('5269657987219232606', '🇭🇰')} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if "CHILE" in text or "CL" in text:
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_country": "cl"}})
-        await update.message.reply_text(f"Country set: CHILE (CL) {P_CL} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+        await update.message.reply_text(f"Country set: CHILE (CL) {E_CL} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     # SERVICE SELECTION
-    if text in ["📱 𝚂𝙴𝚃 𝚂𝙴器件", "SET SERVICE"]:
+    if text == "📱 𝚂𝙴𝚃 𝚂𝙴器件":
         service_kb = [
-            [KeyboardButton("SERVICE: TG (TELEGRAM)")],
-            [KeyboardButton("SERVICE: WA (WHATSAPP)")],
-            [KeyboardButton("MAIN MENU")]
+            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
+            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: WA (𝚆𝙷𝙰𝚃𝚂𝙰𝙿𝙿)")],
+            [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
-        await update.message.reply_text(f"SELECT YOUR SERVICE: {P_SELECT_SERVICE}", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(service_kb, resize_keyboard=True))
+        await update.message.reply_text(f"📱 SELECT YOUR SERVICE:\n{E_SELECT_SERVICE}", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(service_kb, resize_keyboard=True))
         return
 
     if "TG" in text or "TELEGRAM" in text.upper():
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": "tg"}})
-        await update.message.reply_text(f"SERVICE SET: TELEGRAM (TG) {P_TG} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+        await update.message.reply_text(f"SERVICE SET: TELEGRAM (TG) {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
     if "WA" in text or "WHATSAPP" in text.upper():
         users_col.update_one({"user_id": user_id}, {"$set": {"selected_service": "wa"}})
-        await update.message.reply_text(f"SERVICE SET: WHATSAPP (WA) {P_WA} {P_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
+        await update.message.reply_text(f"SERVICE SET: WHATSAPP (WA) {E_WA} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
-    if text in ["🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄", "MAIN MENU"]:
+    if text == "🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄":
         await start(update, context)
         return
 
-    if text in ["🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁", "BY NUMBER"]:
+    if text == "🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁":
         user_has_active = any(order.get("user_id") == user_id for order in active_orders.values())
         if user_has_active:
             await update.message.reply_text(
-                f"<b>Already ekti number active ache!</b> {P_BAN}",
+                "⚠️ <b>Allready ekta number kena royeche!</b>\nNotun number kenar age ager number-ti bebohar somponno korun othoba Cancel korun.",
                 parse_mode="HTML"
             )
             return
@@ -421,20 +430,20 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         country = u_data.get("selected_country", "cl")
         service = u_data.get("selected_service", "wa")
         country_flag = get_country_flag(country)
-        service_icon = P_WA if service == "wa" else P_TG
+        service_icon = E_WA if service == "wa" else emoji("5289967092265660622", "✈️")
         
         bot_rate = get_rate(service_code=service, country_code=country)
         user_bal = u_data.get("balance", 0.0)
 
         if user_bal < bot_rate:
             await update.message.reply_text(
-                f"<b>NOT ENOUGH BALANCE:</b> {bot_rate} USDT {P_BAN}",
+                f"{E_BAN} <b>SORRY NOT ENOUGH BALANCE:</b> {bot_rate} USDT, YOUR BALANCE: {user_bal:.4f} USDT.\nPLEASE DEPOSIT.",
                 parse_mode="HTML"
             )
             return
 
         status_msg = await update.message.reply_text(
-            f"{country.upper()} {country_flag} BUYING NUMBER...",
+            f"⏳ {country.upper()} {country_flag} BUYING NUMBER... WAIT A FEW SECONDS.",
             parse_mode="HTML"
         )
 
@@ -446,18 +455,18 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             id_num = str(res["idNum"])
 
             inline_kb = InlineKeyboardMarkup([
-                [InlineKeyboardButton("Check Active OTP", callback_data=f"check_otp_{id_num}")],
-                [InlineKeyboardButton("Cancel Number", callback_data=f"cancel_num_{id_num}")]
+                [InlineKeyboardButton("📩 Check Active OTP", callback_data=f"check_otp_{id_num}")],
+                [InlineKeyboardButton("🚫 Cancel Number", callback_data=f"cancel_num_{id_num}")]
             ])
 
             sent_msg = await update.message.reply_text(
-                f"NUMBER PURCHASED SUCCESSFULLY! {P_UNBAN}\n\n"
-                f"Number: {phone_num} {P_PHONE}\n"
-                f"ID Num: {id_num} {P_ID}\n"
+                f"NUMBER PURCHASED SUCCESSFULLY! {E_UNBAN}\n\n"
+                f"Number: {phone_num} {E_PHONE}\n"
+                f"ID Num: {id_num} {E_ID}\n"
                 f"Country: {country.upper()} {country_flag}\n"
                 f"Service: {service.upper()} {service_icon}\n"
-                f"Rate: {bot_rate} USDT {P_BAL}\n\n"
-                f"OTP POWAR JONNO OPEKHA KORUN... {P_WAIT_OTP}",
+                f"Rate: {bot_rate} USDT {E_BAL} (OTP ASLEI BALANCE KATBE)\n\n"
+                f"OTP POWAR JONNO OPEK KHA KORUN... {E_WAIT_OTP}",
                 parse_mode="HTML",
                 reply_markup=inline_kb
             )
@@ -480,26 +489,33 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             asyncio.create_task(auto_check_otp(context, user_id, id_num, str(phone_num), sent_msg.message_id))
         else:
             err_msg = res.get("error", "Stock Out!") if isinstance(res, dict) else "Stock Out!"
-            await update.message.reply_text(f"{err_msg} {P_BAN}", parse_mode="HTML")
+            await update.message.reply_text(f"{E_BAN} {err_msg}", parse_mode="HTML")
         return
 
-    if text in ["⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻", "ADMIN PANEL"] and user_id == ADMIN_ID:
+    if text == "⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻" and user_id == ADMIN_ID:
         await send_admin_panel(update, context)
         return
 
 async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_str = "ON" if is_bot_active() else "OFF"
+    status_str = "🟢 ON (Active)" if is_bot_active() else "🔴 OFF (Maintenance)"
     admin_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("DAILY STATS", callback_data="admin_daily_stats")],
-        [InlineKeyboardButton("BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("Unban User", callback_data="admin_unban_start")],
+        [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
+        [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
+        [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
+        [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
+        [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 ZERO BALANCE", callback_data="admin_zero_bal_start")],
+        [InlineKeyboardButton("📢 BROADCAST ALL", callback_data="admin_broadcast_start")],
         [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
     ])
     admin_text = (
-        f"Admin Control Panel: {P_ADMIN_HEADER}\n"
-        f"VIEW ALL USER {P_VIEW_USER}\n"
-        f"DAILY STATS {P_STATS}\n"
-        f"BAN USER {P_BAN}\n"
-        f"UNBAN USER {P_UNBAN}"
+        f"Admin Control Panel: {E_ADMIN_HEADER}\n"
+        f"VIEW ALL USER {E_VIEW_USER}\n"
+        f"DAILY STATS {E_STATS}\n"
+        f"BAN USER {E_BAN}\n"
+        f"UNBAN USER {E_UNBAN}\n"
+        f"ADD BALANCE {E_ADD_BAL}\n"
+        f"ZERO BALANCE {E_ZERO_BAL}\n"
+        f"BROADCAST {E_BROADCAST}"
     )
     if update.message:
         await update.message.reply_text(admin_text, parse_mode="HTML", reply_markup=admin_kb)
@@ -512,24 +528,168 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    if data.startswith("check_otp_"):
+    if data == "admin_view_users" and user_id == ADMIN_ID:
+        try:
+            now = get_bd_time().replace(tzinfo=None)
+            subscribed_users = list(users_col.find({
+                "subscription_expiry": {"$gt": now}
+            }))
+            
+            if not subscribed_users:
+                await query.message.reply_text("📋 Currently, there are no active subscribed users.")
+                return
+            
+            msg = f"👥 Active Subscribed Users ({len(subscribed_users)}):\n\n"
+            for u in subscribed_users:
+                uid = u.get("user_id", "N/A")
+                safe_name = str(u.get("full_name", "User")).replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
+                bal = u.get("balance", 0.0)
+                otp_cnt = u.get("otp_count", 0)
+                msg += f"• {safe_name} ({uid})\n  └ 💰 Balance: {bal:.4f} USDT | 📩 OTP Rcv: {otp_cnt}\n\n"
+                
+            await query.message.reply_text(msg)
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error loading users: {str(e)}")
+
+    elif data == "admin_daily_stats" and user_id == ADMIN_ID:
+        try:
+            all_dates = otp_logs_col.distinct("date")
+            today_str = get_bd_time().strftime("%Y-%m-%d")
+            
+            if today_str not in all_dates:
+                all_dates.append(today_str)
+
+            all_dates = sorted(all_dates, reverse=True)
+
+            if not all_dates:
+                await query.message.reply_text("📊 Kono OTP log ekhono nei.")
+                return
+
+            dates_kb = []
+            for d in all_dates[:10]:
+                label = f"📅 Date: {d} {'(Today)' if d == today_str else ''}"
+                dates_kb.append([InlineKeyboardButton(label, callback_data=f"view_stats_{d}")])
+
+            await query.message.reply_text(
+                "📊 DAILY OTP STATS ARCHIVE\n\n"
+                "Nicher tarikh (date) gulo theke click kore jekono diner report dekhte paren:",
+                reply_markup=InlineKeyboardMarkup(dates_kb)
+            )
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error generating stats: {str(e)}")
+
+    elif data.startswith("view_stats_") and user_id == ADMIN_ID:
+        target_date = data.split("_")[2]
+        try:
+            logs = list(otp_logs_col.find({"date": target_date}))
+            
+            total_count = len(logs)
+            hk_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "hk")
+            cl_count = sum(1 for log in logs if str(log.get("country", "")).lower() == "cl")
+            other_count = total_count - (hk_count + cl_count)
+            
+            wa_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "wa")
+            tg_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "tg")
+
+            stats_msg = (
+                f"📊 OTP STATS FOR {target_date}:\n\n"
+                f"📱 Total OTP Received: {total_count}\n"
+                f"────────────────────\n"
+                f"🇭🇰 Hong Kong (HK): {hk_count}\n"
+                f"🇨🇱 Chile (CL): {cl_count}\n"
+                f"🌐 Others: {other_count}\n"
+                f"────────────────────\n"
+                f"💬 WhatsApp (WA): {wa_count}\n"
+                f"✈️ Telegram (TG): {tg_count}"
+            )
+            await query.message.reply_text(stats_msg)
+        except Exception as e:
+            await query.message.reply_text(f"❌ Error loading stats for {target_date}: {str(e)}")
+
+    elif data == "admin_toggle_bot" and user_id == ADMIN_ID:
+        current_status = is_bot_active()
+        new_status = not current_status
+        set_bot_active(new_status)
+        status_text = "🟢 Bot ON (Active) kora hoyeche!" if new_status else "🔴 Bot OFF (Maintenance Mode) kora hoyeche!"
+        
+        status_str = "🟢 ON (Active)" if new_status else "🔴 OFF (Maintenance)"
+        admin_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("👥 VIEW ALL USER", callback_data="admin_view_users"), InlineKeyboardButton("📊 DAILY STATS", callback_data="admin_daily_stats")],
+            [InlineKeyboardButton("🚫 BAN USER", callback_data="admin_ban_start"), InlineKeyboardButton("✅ Unban User", callback_data="admin_unban_start")],
+            [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
+            [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
+            [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 ZERO BALANCE", callback_data="admin_zero_bal_start")],
+            [InlineKeyboardButton("📢 BROADCAST ALL", callback_data="admin_broadcast_start")],
+            [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
+        ])
+        try:
+            await query.edit_message_reply_markup(reply_markup=admin_kb)
+        except Exception:
+            pass
+        await query.message.reply_text(status_text)
+
+    elif data.startswith("check_otp_"):
         id_num = data.split("_")[2]
         res = fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
         else:
-            await query.message.reply_text(f"AKHONO OTP ASENI! {P_WAIT_OTP}")
+            await query.message.reply_text("⏳ AKHONO OTP ASENI, AKTU PORE ABAR TRY KORUN.")
 
     elif data.startswith("cancel_num_"):
         id_num = data.split("_")[2]
         if id_num in active_orders:
             set_number_status(id_num, "bad")
-            active_orders.pop(id_num, None)
+            order_data = active_orders.pop(id_num, None)
+            
             try:
                 await query.message.delete()
             except Exception:
                 pass
+            
+            if order_data and "user_msg_id" in order_data:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=order_data["user_msg_id"])
+                except Exception:
+                    pass
+        else:
+            try:
+                await query.message.delete()
+            except Exception:
+                await query.message.reply_text("❌ ORDER NOT ACTIVE OR OTP ALREADY RECEIVED.")
+
+    elif data.startswith("approve_dep_"):
+        parts = data.split("_")
+        target_id = int(parts[2])
+        amount = float(parts[3])
+        users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{E_UNBAN} Approved & Balance Added!", parse_mode="HTML")
+        await context.bot.send_message(chat_id=target_id, text=f"🎉 Apnar {amount} USDT deposit shofolbhabe jukto kora hoyeche!")
+
+    elif data.startswith("reject_dep_"):
+        target_id = int(data.split("_")[2])
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{E_BAN} Deposit Rejected!", parse_mode="HTML")
+        await context.bot.send_message(chat_id=target_id, text="❌ Apnar deposit request-ti batil kora hoyeche.")
+
+    elif data.startswith("approve_sub_"):
+        target_id = int(data.split("_")[2])
+        user_doc = users_col.find_one({"user_id": target_id})
+        days = user_doc.get("sub_days", 5) if user_doc else 5
+        expiry_date = get_bd_time().replace(tzinfo=None) + timedelta(days=days)
+        users_col.update_one({"user_id": target_id}, {"$set": {"subscription_expiry": expiry_date}})
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{E_UNBAN} Subscription Approved ({days} Days Active)!", parse_mode="HTML")
+        
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=f"🎉 Apnar Subscription Approved hoyeche! {days} Diner jonno bot-er sob features active kora hoyeche.",
+            reply_markup=get_main_keyboard(target_id)
+        )
+
+    elif data.startswith("reject_sub_"):
+        target_id = int(data.split("_")[2])
+        await query.edit_message_caption(caption=query.message.caption + f"\n\n{E_BAN} Subscription Rejected!", parse_mode="HTML")
+        await context.bot.send_message(chat_id=target_id, text="❌ Apnar subscription request-ti batil kora hoyeche.")
 
 async def process_otp_success(context, id_num: str, otp: str):
     if id_num not in active_orders:
@@ -548,15 +708,28 @@ async def process_otp_success(context, id_num: str, otp: str):
         {"user_id": uid},
         {"$inc": {"balance": -cost, "otp_count": 1}}
     )
-    set_number_status(id_num, "end")
+
+    try:
+        bd_now = get_bd_time()
+        otp_logs_col.insert_one({
+            "user_id": uid,
+            "country": country_code,
+            "service": service_type,
+            "date": bd_now.strftime("%Y-%m-%d"),
+            "timestamp": bd_now
+        })
+    except Exception as e:
+        logging.error(f"Failed to log OTP: {e}")
+    
     updated_user = get_user(uid)
     rem_bal = updated_user.get("balance", 0.0) if updated_user else 0.0
+    set_number_status(id_num, "end")
 
     success_text = (
-        f"OTP RECEIVE SUCCESSFUL! {P_UNBAN}\n\n"
-        f"Number: {phone} {P_PHONE}\n"
-        f"OTP Code: {otp} {P_KEY_OTP}\n\n"
-        f"Balance Deducted: {cost} USDT {P_BAL}\n"
+        f"OTP RECEIVE SUCCESSFUL! {E_UNBAN}\n\n"
+        f"Number: {phone} {E_PHONE}\n"
+        f"OTP Code: {otp} {E_KEY_OTP}\n\n"
+        f"Balance Deducted: {cost} USDT {E_BAL}\n"
         f"Remaining Balance: {rem_bal:.4f} USDT"
     )
 
@@ -570,10 +743,12 @@ async def process_otp_success(context, id_num: str, otp: str):
     except Exception:
         await context.bot.send_message(chat_id=uid, text=success_text, parse_mode="HTML")
 
+    masked_phone = mask_number(phone)
     group_forward_msg = (
-        f"COUNTRY: {country_code.upper()} {country_flag}\n"
-        f"NUMBER: {phone} {P_PHONE}\n"
-        f"OTP: {otp} {P_KEY_OTP}"
+        f"COUNTRY: {country_code.upper()} 🇨🇱 {E_GROUP_HEADER_1}\n"
+        f"NUMBER: {masked_phone} {E_PHONE}\n"
+        f"OTP: {otp} {E_KEY_OTP}\n"
+        f"Message: YOUR {service_type} CODE: {otp} {E_GROUP_HEADER_2}"
     )
 
     if OTP_GROUP_ID:
@@ -583,8 +758,9 @@ async def process_otp_success(context, id_num: str, otp: str):
                 text=group_forward_msg,
                 parse_mode="HTML"
             )
-        except Exception:
-            pass
+            logging.info(f"OTP Forwarded to Group {OTP_GROUP_ID} successfully.")
+        except Exception as e:
+            logging.error(f"Failed to forward OTP to group: {e}")
 
 async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_num: str, phone_num: str, msg_id: int):
     for _ in range(35):
@@ -600,22 +776,107 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
 
 async def deposit_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     payment_kb = InlineKeyboardMarkup([
-        [InlineKeyboardButton("Binance Pay", callback_data="pay_binance")],
-        [InlineKeyboardButton("Cancel", callback_data="cancel_flow_cb")]
+        [InlineKeyboardButton("💛 Binance Pay", callback_data="pay_binance")],
+        [InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]
     ])
-    msg = f"Payment Method select korun: {P_PAY_SELECT}\nBinance Pay {P_BINANCE}"
+    msg = (
+        f"Payment Method select korun: {E_PAY_SELECT}\n"
+        f"Binance pay {E_BINANCE}\n\n"
+        f"Cancel {E_CANCEL}"
+    )
     await update.message.reply_text(msg, parse_mode="HTML", reply_markup=payment_kb)
     return WAITING_AMOUNT
 
+async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+    await query.message.reply_text("📥 Apni koto USDT pathaben ta likhe janan (Minimum: 1 USDT, jemon: 1, 2.5, 5):", reply_markup=cancel_kb)
+    return WAITING_AMOUNT
+
+async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        amount = float(update.message.text.strip())
+        if amount < 1.0:
+            cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+            await update.message.reply_text("❌ Minimum deposit amount 1 USDT. Doya kore 1 ba tar besi amount likhun.", reply_markup=cancel_kb)
+            return WAITING_AMOUNT
+
+        context.user_data["dep_amount"] = amount
+        
+        msg = (
+            f"💰 Deposit Amount: {amount} USDT\n\n"
+            f"👇 Nicher Binance Pay ID-te Binance app theke Pay/Send Money Korun:\n"
+            f"Binance Pay ID: {BINANCE_ID} {E_BINANCE}\n\n"
+            f"⚠️ Note: Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n\n"
+            f"Dollar pathanor por apnar Order ID / TxID-ti likhe message din:"
+        )
+        cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
+        return WAITING_TXID
+    except ValueError:
+        cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+        await update.message.reply_text("❌ Sothik shongkha likhun (jemon: 1 ba 5).", reply_markup=cancel_kb)
+        return WAITING_AMOUNT
+
+async def deposit_txid_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txid = update.message.text.strip()
+    context.user_data["dep_txid"] = txid
+    cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
+    await update.message.reply_text("📸 Ekhon apnar payment-er screenshot (Photo) Pathan:", reply_markup=cancel_kb)
+    return WAITING_SCREENSHOT
+
+async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    photo = update.message.photo[-1]
+    amount = context.user_data.get("dep_amount")
+    txid = context.user_data.get("dep_txid")
+
+    admin_kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Approve", callback_data=f"approve_dep_{user.id}_{amount}"),
+            InlineKeyboardButton("❌ Reject", callback_data=f"reject_dep_{user.id}")
+        ]
+    ])
+
+    caption = (
+        f"📥 Notun Deposit Request!\n\n"
+        f"👤 User: {user.full_name} ({user.id})\n"
+        f"💰 Amount: {amount} USDT\n"
+        f"🧾 TxID: {txid}"
+    )
+
+    await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="HTML", reply_markup=admin_kb)
+    await update.message.reply_text(f"{E_UNBAN} Apnar deposit request admin-er kache pathano hoyeche! Jaachai kore druto balance jukto kora hobe.", parse_mode="HTML")
+    return ConversationHandler.END
+
+async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.callback_query:
+        query = update.callback_query
+        await query.answer()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+    elif update.message:
+        await update.message.reply_text("❌ Process batil kora hoyeche.")
+    return ConversationHandler.END
+
+# Sub and Admin handlers implementation...
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
     deposit_conv = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^(💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃|DEPOSIT)$"), deposit_start)],
+        entry_points=[MessageHandler(filters.Regex("^💵 𝙳𝙴𝙿𝙾𝚂𝙸𝚃$"), deposit_start)],
         states={
-            WAITING_AMOUNT: [CallbackQueryHandler(lambda u, c: None, pattern="^pay_binance$")]
+            WAITING_AMOUNT: [
+                CallbackQueryHandler(deposit_binance_selected, pattern="^pay_binance$"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_amount_received)
+            ],
+            WAITING_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, deposit_txid_received)],
+            WAITING_SCREENSHOT: [MessageHandler(filters.PHOTO, deposit_screenshot_received)]
         },
-        fallbacks=[CallbackQueryHandler(lambda u, c: ConversationHandler.END, pattern="^cancel_flow_cb$")]
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
     app.add_handler(CommandHandler("start", start))
@@ -626,7 +887,7 @@ async def run_bot():
     async with app:
         await app.start()
         await app.updater.start_polling()
-        logging.info("Bot startup sequence completed. Polling started successfully.")
+        logging.info("🤖 Bot startup sequence completed. Polling started successfully.")
         await asyncio.Event().wait()
 
 def main():
