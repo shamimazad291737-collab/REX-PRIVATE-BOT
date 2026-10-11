@@ -65,7 +65,7 @@ otp_logs_col = db["otp_logs"]
 def emoji(emoji_id: str, fallback: str = "✨") -> str:
     return f'<tg-emoji emoji-id="{emoji_id}">{fallback}</tg-emoji>'
 
-# Specific Emoji Mapping from User Request
+# Specific Emoji Mapping
 E_CL = emoji("5222350726340032308", "🇨🇱")
 E_WA = emoji("5334759662677957452", "💬")
 E_SUB_VALID = emoji("5352638632278660622", "📅")
@@ -93,6 +93,10 @@ E_BROADCAST = emoji("5424818078833715060", "📢")
 E_GROUP_HEADER_1 = emoji("5447410659077661506", "🌐")
 E_GROUP_HEADER_2 = emoji("5334759662677957452", "💬")
 E_KEY_OTP = emoji("5282843764451195532", "🔑")
+
+# Custom Requested Emojis
+E_SELECT_COUNTRY_REQ = emoji("5397916757333654639", "🌐")
+E_PANEL_BAL_REQ = emoji("5334530732331143967", "🏦")
 
 # Flask Web Server
 flask_app = Flask("")
@@ -354,7 +358,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg = f"<b>MY BALANCE:</b> {bot_bal:.4f} USDT {E_BAL}"
         if user_id == ADMIN_ID:
             site_bal = get_vak_balance()
-            msg += f"\n🏦 <b>PANEL BALANCE :</b> {site_bal:.4f} USD"
+            msg += f"\nPANEL BALANCE : {site_bal:.4f} USD\n{E_PANEL_BAL_REQ}"
         await update.message.reply_text(msg, parse_mode="HTML")
         return
 
@@ -381,7 +385,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
-        await update.message.reply_text("🌐 SELECT YOUR COUNTRY:", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
+        await update.message.reply_text(f"🌐 SELECT YOUR COUNTRY:\n{E_SELECT_COUNTRY_REQ}", parse_mode="HTML", reply_markup=ReplyKeyboardMarkup(country_kb, resize_keyboard=True))
         return
 
     if "HK" in text:
@@ -397,7 +401,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # SERVICE SELECTION
     if text == "📱 𝚂𝙴𝚃 𝚂𝙴器件":
         service_kb = [
-            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲E: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
+            [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
             [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲𝙴: WA (𝚆𝙷𝙰𝚃𝚂𝙰𝙿𝙿)")],
             [KeyboardButton("🔙 𝙼𝙰𝙸𝙽 𝙼𝙴𝙽𝚄")]
         ]
