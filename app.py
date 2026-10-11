@@ -322,7 +322,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"⚙️ RECENT SETUP:\n"
         f"• COUNTRIES: {curr_country} {country_flag}\n"
         f"• Service: {curr_service} {service_icon}\n"
-        f"• YOUR BALANCE: {u_data.get('balance', 0.0):.4f} USDT {E_BAL}\n"
+        f"• YOUR BALANCE: <code>{u_data.get('balance', 0.0):.4f}</code> USDT {E_BAL}\n"
         f"• SUBSCRIPTION VALID TILL: Unlimited (Admin) {E_SUB_VALID}\n\n"
         f"Kaj korte niche dewa menu use korun:"
     )
@@ -355,10 +355,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if text == "💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴":
         bot_bal = u_data.get("balance", 0.0)
-        msg = f"<b>MY BALANCE:</b> {bot_bal:.4f} USDT {E_BAL}"
+        msg = f"<b>MY BALANCE:</b> <code>{bot_bal:.4f}</code> USDT {E_BAL}"
         if user_id == ADMIN_ID:
             site_bal = get_vak_balance()
-            msg += f"\nPANEL BALANCE : {site_bal:.4f} USD\n{E_PANEL_BAL_REQ}"
+            msg += f"\nPANEL BALANCE : <code>{site_bal:.4f}</code> USD\n{E_PANEL_BAL_REQ}"
         await update.message.reply_text(msg, parse_mode="HTML")
         return
 
@@ -370,10 +370,10 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         profile_msg = (
             f"Apnar Profile Info: {E_PROFILE_HEADER}\n"
-            f"User ID: {user_id} {E_ID}\n"
+            f"User ID: <code>{user_id}</code> {E_ID}\n"
             f"Name: {user.full_name} {E_NAME}\n"
-            f"Balance: {bot_bal:.4f} USDT {E_BAL}\n"
-            f"Total OTP Received: {otp_cnt} {E_OTP_RCV}\n"
+            f"Balance: <code>{bot_bal:.4f}</code> USDT {E_BAL}\n"
+            f"Total OTP Received: <code>{otp_cnt}</code> {E_OTP_RCV}\n"
             f"Subscription Valid: Unlimited (Admin) {E_SUB_EXP}"
         )
         await update.message.reply_text(profile_msg, parse_mode="HTML")
@@ -441,7 +441,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if user_bal < bot_rate:
             await update.message.reply_text(
-                f"{E_BAN} <b>SORRY NOT ENOUGH BALANCE:</b> {bot_rate} USDT, YOUR BALANCE: {user_bal:.4f} USDT.\nPLEASE DEPOSIT.",
+                f"{E_BAN} <b>SORRY NOT ENOUGH BALANCE:</b> <code>{bot_rate}</code> USDT, YOUR BALANCE: <code>{user_bal:.4f}</code> USDT.\nPLEASE DEPOSIT.",
                 parse_mode="HTML"
             )
             return
@@ -465,11 +465,11 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             sent_msg = await update.message.reply_text(
                 f"NUMBER PURCHASED SUCCESSFULLY! {E_UNBAN}\n\n"
-                f"Number: {phone_num} {E_PHONE}\n"
-                f"ID Num: {id_num} {E_ID}\n"
+                f"Number: <code>{phone_num}</code> {E_PHONE}\n"
+                f"ID Num: <code>{id_num}</code> {E_ID}\n"
                 f"Country: {country.upper()} {country_flag}\n"
                 f"Service: {service.upper()} {service_icon}\n"
-                f"Rate: {bot_rate} USDT {E_BAL} (OTP ASLEI BALANCE KATBE)\n\n"
+                f"Rate: <code>{bot_rate}</code> USDT {E_BAL} (OTP ASLEI BALANCE KATBE)\n\n"
                 f"OTP POWAR JONNO OPEK KHA KORUN... {E_WAIT_OTP}",
                 parse_mode="HTML",
                 reply_markup=inline_kb
@@ -540,9 +540,9 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 safe_name = str(u.get("full_name", "User")).replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
                 bal = u.get("balance", 0.0)
                 otp_cnt = u.get("otp_count", 0)
-                msg += f"• {safe_name} ({uid})\n  └ 💰 Balance: {bal:.4f} USDT | 📩 OTP Rcv: {otp_cnt}\n\n"
+                msg += f"• {safe_name} (<code>{uid}</code>)\n  └ 💰 Balance: <code>{bal:.4f}</code> USDT | 📩 OTP Rcv: <code>{otp_cnt}</code>\n\n"
                 
-            await query.message.reply_text(msg)
+            await query.message.reply_text(msg, parse_mode="HTML")
         except Exception as e:
             await query.message.reply_text(f"❌ Error loading users: {str(e)}")
 
@@ -587,17 +587,17 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             tg_count = sum(1 for log in logs if str(log.get("service", "")).lower() == "tg")
 
             stats_msg = (
-                f"📊 OTP STATS FOR {target_date}:\n\n"
-                f"📱 Total OTP Received: {total_count}\n"
+                f"📊 OTP STATS FOR <code>{target_date}</code>:\n\n"
+                f"📱 Total OTP Received: <code>{total_count}</code>\n"
                 f"────────────────────\n"
-                f"🇭🇰 Hong Kong (HK): {hk_count}\n"
-                f"🇨🇱 Chile (CL): {cl_count}\n"
-                f"🌐 Others: {other_count}\n"
+                f"🇭🇰 Hong Kong (HK): <code>{hk_count}</code>\n"
+                f"🇨🇱 Chile (CL): <code>{cl_count}</code>\n"
+                f"🌐 Others: <code>{other_count}</code>\n"
                 f"────────────────────\n"
-                f"💬 WhatsApp (WA): {wa_count}\n"
-                f"✈️ Telegram (TG): {tg_count}"
+                f"💬 WhatsApp (WA): <code>{wa_count}</code>\n"
+                f"✈️ Telegram (TG): <code>{tg_count}</code>"
             )
-            await query.message.reply_text(stats_msg)
+            await query.message.reply_text(stats_msg, parse_mode="HTML")
         except Exception as e:
             await query.message.reply_text(f"❌ Error loading stats for {target_date}: {str(e)}")
 
@@ -660,7 +660,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
         amount = float(parts[3])
         users_col.update_one({"user_id": target_id}, {"$inc": {"balance": amount}})
         await query.edit_message_caption(caption=query.message.caption + f"\n\n{E_UNBAN} Approved & Balance Added!", parse_mode="HTML")
-        await context.bot.send_message(chat_id=target_id, text=f"🎉 Apnar {amount} USDT deposit shofolbhabe jukto kora hoyeche!")
+        await context.bot.send_message(chat_id=target_id, text=f"🎉 Apnar <code>{amount}</code> USDT deposit shofolbhabe jukto kora hoyeche!", parse_mode="HTML")
 
     elif data.startswith("reject_dep_"):
         target_id = int(data.split("_")[2])
@@ -722,10 +722,10 @@ async def process_otp_success(context, id_num: str, otp: str):
 
     success_text = (
         f"OTP RECEIVE SUCCESSFUL! {E_UNBAN}\n\n"
-        f"Number: {phone} {E_PHONE}\n"
-        f"OTP Code: {otp} {E_KEY_OTP}\n\n"
-        f"Balance Deducted: {cost} USDT {E_BAL}\n"
-        f"Remaining Balance: {rem_bal:.4f} USDT"
+        f"Number: <code>{phone}</code> {E_PHONE}\n"
+        f"OTP Code: <code>{otp}</code> {E_KEY_OTP}\n\n"
+        f"Balance Deducted: <code>{cost}</code> USDT {E_BAL}\n"
+        f"Remaining Balance: <code>{rem_bal:.4f}</code> USDT"
     )
 
     try:
@@ -741,9 +741,9 @@ async def process_otp_success(context, id_num: str, otp: str):
     masked_phone = mask_number(phone)
     group_forward_msg = (
         f"COUNTRY: {country_code.upper()} 🇨🇱 {E_GROUP_HEADER_1}\n"
-        f"NUMBER: {masked_phone} {E_PHONE}\n"
-        f"OTP: {otp} {E_KEY_OTP}\n"
-        f"Message: YOUR {service_type} CODE: {otp} {E_GROUP_HEADER_2}"
+        f"NUMBER: <code>{masked_phone}</code> {E_PHONE}\n"
+        f"OTP: <code>{otp}</code> {E_KEY_OTP}\n"
+        f"Message: YOUR {service_type} CODE: <code>{otp}</code> {E_GROUP_HEADER_2}"
     )
 
     if OTP_GROUP_ID:
@@ -785,7 +785,12 @@ async def deposit_binance_selected(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
-    await query.message.reply_text("📥 Apni koto USDT pathaben ta likhe janan (Minimum: 1 USDT, jemon: 1, 2.5, 5):", reply_markup=cancel_kb)
+    
+    msg_select = (
+        f"📥 Apni koto USDT pathaben ta likhe janan (Minimum: 1 USDT, jemon: 1, 2.5, 5):\n"
+        f"{emoji('5395444784611480792', '📥')}"
+    )
+    await query.message.reply_text(msg_select, parse_mode="HTML", reply_markup=cancel_kb)
     return WAITING_AMOUNT
 
 async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -799,11 +804,13 @@ async def deposit_amount_received(update: Update, context: ContextTypes.DEFAULT_
         context.user_data["dep_amount"] = amount
         
         msg = (
-            f"💰 Deposit Amount: {amount} USDT\n\n"
+            f"💰 Deposit Amount: <code>{amount}</code> USDT {emoji('5224257782013769471', '💰')}\n\n"
             f"👇 Nicher Binance Pay ID-te Binance app theke Pay/Send Money Korun:\n"
-            f"Binance Pay ID: {BINANCE_ID} {E_BINANCE}\n\n"
-            f"⚠️ Note: Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n\n"
-            f"Dollar pathanor por apnar Order ID / TxID-ti likhe message din:"
+            f"Binance Pay ID: <code>{BINANCE_ID}</code> {E_BINANCE}\n\n"
+            f"⚠️ Note: Minimum deposit 1 USDT. Binance Pay-er madhyome kono extra fee charai pathano jabe.\n"
+            f"{emoji('5420323339723881652', '⚠️')}\n\n"
+            f"Dollar pathanor por apnar Order ID / TxID-ti likhe message din:\n"
+            f"{emoji('5217822164362739968', '🧾')}"
         )
         cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=cancel_kb)
@@ -817,7 +824,12 @@ async def deposit_txid_received(update: Update, context: ContextTypes.DEFAULT_TY
     txid = update.message.text.strip()
     context.user_data["dep_txid"] = txid
     cancel_kb = InlineKeyboardMarkup([[InlineKeyboardButton("🚫 Cancel", callback_data="cancel_flow_cb")]])
-    await update.message.reply_text("📸 Ekhon apnar payment-er screenshot (Photo) Pathan:", reply_markup=cancel_kb)
+    
+    msg_photo = (
+        f"📸 Ekhon apnar payment-er screenshot (Photo) Pathan:\n"
+        f"{emoji('5895427227528467580', '📸')}"
+    )
+    await update.message.reply_text(msg_photo, parse_mode="HTML", reply_markup=cancel_kb)
     return WAITING_SCREENSHOT
 
 async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -834,10 +846,10 @@ async def deposit_screenshot_received(update: Update, context: ContextTypes.DEFA
     ])
 
     caption = (
-        f"📥 Notun Deposit Request!\n\n"
-        f"👤 User: {user.full_name} ({user.id})\n"
-        f"💰 Amount: {amount} USDT\n"
-        f"🧾 TxID: {txid}"
+        f"📥 Notun Deposit Request! {emoji('5445355530111437729', '📥')}\n\n"
+        f"👤 User: {user.full_name} (<code>{user.id}</code>) {emoji('5193063022226086560', '👤')}\n"
+        f"💰 Amount: <code>{amount}</code> USDT {emoji('5224257782013769471', '💰')}\n"
+        f"🧾 TxID: <code>{txid}</code> {emoji('5271604874419647061', '🧾')}"
     )
 
     await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo.file_id, caption=caption, parse_mode="HTML", reply_markup=admin_kb)
