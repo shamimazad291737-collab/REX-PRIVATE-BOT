@@ -119,16 +119,17 @@ E_KEY_OTP = emoji("5282843764451195532", "🔑")
 E_SELECT_COUNTRY_REQ = emoji("5397916757333654639", "🌐")
 E_PANEL_BAL_REQ = emoji("5334530732331143967", "🏦")
 
-# Flask Web Server
-flask_app = Flask("")
+# Flask Web Server (Optimized for UptimeRobot)
+flask_app = Flask("rex_bot_web")
 
 @flask_app.route("/")
+@flask_app.route("/health")
 def home():
     return "Rex Private Telegram Bot is Active!", 200
 
 def run_flask():
     port = int(os.environ.get("PORT", 8080))
-    flask_app.run(host="0.0.0.0", port=port)
+    flask_app.run(host="0.0.0.0", port=port, use_reloader=False, threaded=True)
 
 active_orders = {}
 
