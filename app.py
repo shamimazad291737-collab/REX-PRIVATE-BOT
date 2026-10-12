@@ -36,6 +36,37 @@ BD_TIMEZONE = timezone(timedelta(hours=6))
 def get_bd_time():
     return datetime.now(BD_TIMEZONE)
 
+def parse_time_duration(time_str: str) -> timedelta:
+    """
+    Parse duration strings like:
+    '5m' -> 5 minutes
+    '5h' -> 5 hours
+    '5d' -> 5 days
+    '1d 12h 30m' -> combination
+    '5' -> defaults to 5 days
+    """
+    clean_str = time_str.strip().lower()
+    
+    # If pure integer, treat as days
+    if clean_str.isdigit():
+        return timedelta(days=int(clean_str))
+        
+    days = 0
+    hours = 0
+    minutes = 0
+    
+    pattern = r'(?:(\d+)\s*d)?\s*(?:(\d+)\s*h)?\s*(?:(\d+)\s*m)?'
+    match = re.fullmatch(pattern, clean_str)
+    
+    if match and any(match.groups()):
+        d, h, m = match.groups()
+        if d: days = int(d)
+        if h: hours = int(h)
+        if m: minutes = int(m)
+        return timedelta(days=days, hours=hours, minutes=minutes)
+    
+    return None
+
 # Environment Variables & Config
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 VAK_SMS_API_KEY = os.getenv("VAK_SMS_API_KEY", "893d842ab70a4e79b4ad323185a69257")
@@ -128,7 +159,7 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
     ADMIN_RATE_TG_CL_SET,
     ADMIN_BROADCAST,
     ADMIN_EXPIRY_USER,
-    ADMIN_EXPIRY_DAYS,
+    ADMIN_EXPIRY_TIME,
 ) = range(7, 19)
 
 # Helper Functions
@@ -1001,37 +1032,51 @@ async def admin_set_expiry_user(update: Update, context: ContextTypes.DEFAULT_TY
             await update.message.reply_text(f"❌ User ID <code>{uid}</code> database-e pawa jayni.", parse_mode="HTML")
             return ConversationHandler.END
         context.user_data["target_exp_uid"] = uid
-        await update.message.reply_text(f"📅 User <code>{uid}</code>-er jonno aje theke koto **din (days)** subscription active thakbe? (Jemon: 5, 7, 30):", parse_mode="HTML")
-        return ADMIN_EXPIRY_DAYS
+        
+        msg_text = (
+            f"📅 User <code>{uid}</code>-er jonno active duration-ti likhun:\n\n"
+            f"📌 Example Formats:\n"
+            f"• <code>5m</code> = 5 Minutes\n"
+            f"• <code>5h</code> = 5 Hours\n"
+            f"• <code>5d</code> = 5 Days\n"
+            f"• <code>1d 12h</code> = 1 Day 12 Hours\n"
+            f"• <code>5</code> = 5 Days (Default)"
+        )
+        await update.message.reply_text(msg_text, parse_mode="HTML")
+        return ADMIN_EXPIRY_TIME
     except ValueError:
         await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
         return ConversationHandler.END
 
 async def admin_set_expiry_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    input_str = update.message.text.strip()
+    uid = context.user_data.get("target_exp_uid")
+    
+    delta = parse_time_duration(input_str)
+    
+    if not delta or delta.total_seconds() <= 0:
+        await update.message.reply_text("❌ Invalid Format! Doya kore '5m', '5h', '5d' ba '1d 12h' erom likhe pathan.")
+        return ConversationHandler.END
+
+    expiry_date = get_bd_time().replace(tzinfo=None) + delta
+    users_col.update_one({"user_id": uid}, {"$set": {"subscription_expiry": expiry_date}})
+    
+    exp_str = expiry_date.strftime("%Y-%m-%d %H:%M")
+    await update.message.reply_text(
+        f"✅ User <code>{uid}</code>-er subscription <b>{input_str}</b>-er jonno active kora hoyeche.\n"
+        f"📅 New Expiry: <code>{exp_str}</code> (BD Time)",
+        parse_mode="HTML"
+    )
     try:
-        days = int(update.message.text.strip())
-        uid = context.user_data.get("target_exp_uid")
-        
-        expiry_date = get_bd_time().replace(tzinfo=None) + timedelta(days=days)
-        users_col.update_one({"user_id": uid}, {"$set": {"subscription_expiry": expiry_date, "sub_days": days}})
-        
-        exp_str = expiry_date.strftime("%Y-%m-%d %H:%M")
-        await update.message.reply_text(
-            f"✅ User <code>{uid}</code>-er subscription <b>{days} Days</b>-er jonno active kora hoyeche.\n"
-            f"📅 New Expiry: <code>{exp_str}</code> (BD Time)",
-            parse_mode="HTML"
+        await context.bot.send_message(
+            chat_id=uid,
+            text=f"🎉 Admin apnar subscription validity **{input_str}** set kore diyeche!\n📅 Valid till: <code>{exp_str}</code>",
+            parse_mode="HTML",
+            reply_markup=get_main_keyboard(uid)
         )
-        try:
-            await context.bot.send_message(
-                chat_id=uid,
-                text=f"🎉 Admin apnar subscription validity **{days} Days** set kore diyeche! Valid till: <code>{exp_str}</code>",
-                parse_mode="HTML",
-                reply_markup=get_main_keyboard(uid)
-            )
-        except Exception:
-            pass
-    except ValueError:
-        await update.message.reply_text("❌ Invalid Days format! Sothik shongkha likhun.")
+    except Exception:
+        pass
+        
     return ConversationHandler.END
 
 async def admin_rate_wa_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1306,7 +1351,7 @@ async def run_bot():
         entry_points=[CallbackQueryHandler(admin_set_expiry_start, pattern="^admin_set_expiry_start$")],
         states={
             ADMIN_EXPIRY_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_expiry_user)],
-            ADMIN_EXPIRY_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_expiry_days)]
+            ADMIN_EXPIRY_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_expiry_days)]
         },
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
