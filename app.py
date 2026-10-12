@@ -127,7 +127,9 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
     ADMIN_RATE_TG_HK_SET,
     ADMIN_RATE_TG_CL_SET,
     ADMIN_BROADCAST,
-) = range(7, 17)
+    ADMIN_EXPIRY_USER,
+    ADMIN_EXPIRY_DAYS,
+) = range(7, 19)
 
 # Helper Functions
 def get_country_flag(country_code: str) -> str:
@@ -309,7 +311,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     exp_time = u_data.get("subscription_expiry")
-    exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
+    if user_id == ADMIN_ID:
+        exp_str = "Unlimited (Admin)"
+    elif exp_time:
+        exp_str = exp_time.strftime("%Y-%m-%d %H:%M")
+    else:
+        exp_str = "N/A"
 
     curr_country_code = u_data.get("selected_country", "cl")
     curr_country = curr_country_code.upper()
@@ -324,7 +331,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• COUNTRIES: {curr_country} {country_flag}\n"
         f"• Service: {curr_service} {service_icon}\n"
         f"• YOUR BALANCE: <code>{u_data.get('balance', 0.0):.4f}</code> USDT {E_BAL}\n"
-        f"• SUBSCRIPTION VALID TILL: Unlimited (Admin) {E_SUB_VALID}\n\n"
+        f"• SUBSCRIPTION VALID TILL: {exp_str} {E_SUB_VALID}\n\n"
         f"Kaj korte niche dewa menu use korun:"
     )
     await update.message.reply_text(welcome_msg, parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
@@ -367,7 +374,12 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_bal = u_data.get("balance", 0.0)
         otp_cnt = u_data.get("otp_count", 0)
         exp_time = u_data.get("subscription_expiry")
-        exp_str = exp_time.strftime("%Y-%m-%d %H:%M") if (exp_time and user_id != ADMIN_ID) else "Unlimited (Admin)"
+        if user_id == ADMIN_ID:
+            exp_str = "Unlimited (Admin)"
+        elif exp_time:
+            exp_str = exp_time.strftime("%Y-%m-%d %H:%M")
+        else:
+            exp_str = "N/A"
         
         profile_msg = (
             f"Apnar Profile Info: {E_PROFILE_HEADER}\n"
@@ -375,7 +387,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Name: {user.full_name} {E_NAME}\n"
             f"Balance: <code>{bot_bal:.4f}</code> USDT {E_BAL}\n"
             f"Total OTP Received: <code>{otp_cnt}</code> {E_OTP_RCV}\n"
-            f"Subscription Valid: Unlimited (Admin) {E_SUB_EXP}"
+            f"Subscription Valid: {exp_str} {E_SUB_EXP}"
         )
         await update.message.reply_text(profile_msg, parse_mode="HTML")
         return
@@ -509,6 +521,7 @@ async def send_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
         [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
         [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 ZERO BALANCE", callback_data="admin_zero_bal_start")],
+        [InlineKeyboardButton("📅 SET USER EXPIRY", callback_data="admin_set_expiry_start")],
         [InlineKeyboardButton("📢 BROADCAST ALL", callback_data="admin_broadcast_start")],
         [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
     ])
@@ -541,7 +554,9 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 safe_name = str(u.get("full_name", "User")).replace("*", "").replace("_", "").replace("`", "").replace("[", "").replace("]", "")
                 bal = u.get("balance", 0.0)
                 otp_cnt = u.get("otp_count", 0)
-                msg += f"• {safe_name} (<code>{uid}</code>)\n  └ 💰 Balance: <code>{bal:.4f}</code> USDT | 📩 OTP Rcv: <code>{otp_cnt}</code>\n\n"
+                exp = u.get("subscription_expiry")
+                exp_s = exp.strftime("%Y-%m-%d %H:%M") if exp else "N/A"
+                msg += f"• {safe_name} (<code>{uid}</code>)\n  └ 💰 Balance: <code>{bal:.4f}</code> USDT | 📩 OTP Rcv: <code>{otp_cnt}</code>\n  └ 📅 Valid Till: <code>{exp_s}</code>\n\n"
                 
             await query.message.reply_text(msg, parse_mode="HTML")
         except Exception as e:
@@ -615,6 +630,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("💵 SET HK WA PRICE", callback_data="admin_rate_wa_hk_start"), InlineKeyboardButton("💵 SET CL WA PRICE", callback_data="admin_rate_wa_cl_start")],
             [InlineKeyboardButton("💵 SET HK TG PRICE", callback_data="admin_rate_tg_hk_start"), InlineKeyboardButton("💵 SET CL TG PRICE", callback_data="admin_rate_tg_cl_start")],
             [InlineKeyboardButton("➕ Add Balance", callback_data="admin_add_bal_start"), InlineKeyboardButton("🔄 ZERO BALANCE", callback_data="admin_zero_bal_start")],
+            [InlineKeyboardButton("📅 SET USER EXPIRY", callback_data="admin_set_expiry_start")],
             [InlineKeyboardButton("📢 BROADCAST ALL", callback_data="admin_broadcast_start")],
             [InlineKeyboardButton(f"BOT STATUS: {status_str}", callback_data="admin_toggle_bot")]
         ])
@@ -971,6 +987,53 @@ async def admin_zero_bal_process(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
     return ConversationHandler.END
 
+async def admin_set_expiry_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.message.reply_text("📅 Subscription validity set/reset korte chawa **User ID**-ti likhe pathan:")
+    return ADMIN_EXPIRY_USER
+
+async def admin_set_expiry_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        uid = int(update.message.text.strip())
+        user = get_user(uid)
+        if not user:
+            await update.message.reply_text(f"❌ User ID <code>{uid}</code> database-e pawa jayni.", parse_mode="HTML")
+            return ConversationHandler.END
+        context.user_data["target_exp_uid"] = uid
+        await update.message.reply_text(f"📅 User <code>{uid}</code>-er jonno aje theke koto **din (days)** subscription active thakbe? (Jemon: 5, 7, 30):", parse_mode="HTML")
+        return ADMIN_EXPIRY_DAYS
+    except ValueError:
+        await update.message.reply_text("❌ Invalid User ID! Sothik shongkha likhun.")
+        return ConversationHandler.END
+
+async def admin_set_expiry_days(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        days = int(update.message.text.strip())
+        uid = context.user_data.get("target_exp_uid")
+        
+        expiry_date = get_bd_time().replace(tzinfo=None) + timedelta(days=days)
+        users_col.update_one({"user_id": uid}, {"$set": {"subscription_expiry": expiry_date, "sub_days": days}})
+        
+        exp_str = expiry_date.strftime("%Y-%m-%d %H:%M")
+        await update.message.reply_text(
+            f"✅ User <code>{uid}</code>-er subscription <b>{days} Days</b>-er jonno active kora hoyeche.\n"
+            f"📅 New Expiry: <code>{exp_str}</code> (BD Time)",
+            parse_mode="HTML"
+        )
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text=f"🎉 Admin apnar subscription validity **{days} Days** set kore diyeche! Valid till: <code>{exp_str}</code>",
+                parse_mode="HTML",
+                reply_markup=get_main_keyboard(uid)
+            )
+        except Exception:
+            pass
+    except ValueError:
+        await update.message.reply_text("❌ Invalid Days format! Sothik shongkha likhun.")
+    return ConversationHandler.END
+
 async def admin_rate_wa_hk_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1239,6 +1302,15 @@ async def run_bot():
         fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
     )
 
+    admin_set_expiry_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(admin_set_expiry_start, pattern="^admin_set_expiry_start$")],
+        states={
+            ADMIN_EXPIRY_USER: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_expiry_user)],
+            ADMIN_EXPIRY_DAYS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_set_expiry_days)]
+        },
+        fallbacks=[CallbackQueryHandler(cancel_flow, pattern="^cancel_flow_cb$")]
+    )
+
     admin_rate_wa_hk_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(admin_rate_wa_hk_start, pattern="^admin_rate_wa_hk_start$")],
         states={ADMIN_RATE_WA_HK_SET: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_rate_wa_hk_process)]},
@@ -1276,6 +1348,7 @@ async def run_bot():
     app.add_handler(admin_unban_conv)
     app.add_handler(admin_add_bal_conv)
     app.add_handler(admin_zero_bal_conv)
+    app.add_handler(admin_set_expiry_conv)
     app.add_handler(admin_rate_wa_hk_conv)
     app.add_handler(admin_rate_wa_cl_conv)
     app.add_handler(admin_rate_tg_hk_conv)
