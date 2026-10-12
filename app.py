@@ -23,7 +23,7 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters,
 )
-import requests
+import aiohttp
 
 # Logging Configuration
 logging.basicConfig(
@@ -37,17 +37,7 @@ def get_bd_time():
     return datetime.now(BD_TIMEZONE)
 
 def parse_time_duration(time_str: str) -> timedelta:
-    """
-    Parse duration strings like:
-    '5m' -> 5 minutes
-    '5h' -> 5 hours
-    '5d' -> 5 days
-    '1d 12h 30m' -> combination
-    '5' -> defaults to 5 days
-    """
     clean_str = time_str.strip().lower()
-    
-    # If pure integer, treat as days
     if clean_str.isdigit():
         return timedelta(days=int(clean_str))
         
@@ -126,7 +116,6 @@ E_GROUP_HEADER_1 = emoji("5447410659077661506", "🌐")
 E_GROUP_HEADER_2 = emoji("5334759662677957452", "💬")
 E_KEY_OTP = emoji("5282843764451195532", "🔑")
 
-# Custom Requested Emojis
 E_SELECT_COUNTRY_REQ = emoji("5397916757333654639", "🌐")
 E_PANEL_BAL_REQ = emoji("5334530732331143967", "🏦")
 
@@ -141,10 +130,8 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
-# In-Memory Active Orders
 active_orders = {}
 
-# Conversation States
 WAITING_AMOUNT, WAITING_TXID, WAITING_SCREENSHOT = range(3)
 SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
 (
@@ -162,7 +149,6 @@ SUB_PLAN, SUB_METHOD, SUB_TXID, SUB_SCREENSHOT = range(3, 7)
     ADMIN_EXPIRY_TIME,
 ) = range(7, 19)
 
-# Helper Functions
 def get_country_flag(country_code: str) -> str:
     code = country_code.lower()
     if code == "hk":
@@ -250,7 +236,6 @@ def is_subscribed(user_id: int) -> bool:
             return True
     return False
 
-# Keyboards
 def get_main_keyboard(user_id):
     keyboard = [
         [KeyboardButton("💳 𝙰𝙲𝙲𝙾𝚄𝙽𝚃 𝙱𝙰𝙻𝙰𝙽𝙲𝙴"), KeyboardButton("🛒 𝙱𝚈 𝙽𝚄𝙼𝙱𝙴𝚁")],
@@ -261,18 +246,22 @@ def get_main_keyboard(user_id):
         keyboard.append([KeyboardButton("⚙️ 𝙰𝙳𝙼𝙸𝙽 𝙿𝙰𝙽𝙴𝙻")])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
-# VAK-SMS API Functions
-def set_number_status(id_num: str, status: str):
+# Asynchronous VAK-SMS API Functions
+async def set_number_status(id_num: str, status: str):
     url = f"https://vak-sms.com/api/setStatus/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}&status={status}"
     try:
-        return requests.get(url).json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as resp:
+                return await resp.json()
     except Exception as e:
         return {"error": str(e)}
 
-def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 0.087):
+async def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 0.087):
     url = f"https://vak-sms.com/api/getNumber/?apiKey={VAK_SMS_API_KEY}&service={service}&country={country}&maxPrice={max_price}"
     try:
-        res = requests.get(url).json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as resp:
+                res = await resp.json()
         
         if isinstance(res, dict) and res.get("error") == "noNumber":
             return {"error": "Stock Out!"}
@@ -284,7 +273,7 @@ def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 
                     price_val = float(assigned_price)
                     if price_val > max_price:
                         id_num = str(res["idNum"])
-                        set_number_status(id_num, "bad")
+                        await set_number_status(id_num, "bad")
                         return {"error": "Stock Out!"}
                 except ValueError:
                     pass
@@ -293,18 +282,22 @@ def buy_vak_number(service: str = "wa", country: str = "cl", max_price: float = 
     except Exception as e:
         return {"error": "Stock Out!"}
 
-def get_vak_balance():
+async def get_vak_balance():
     url = f"https://vak-sms.com/api/getBalance/?apiKey={VAK_SMS_API_KEY}"
     try:
-        res = requests.get(url).json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as resp:
+                res = await resp.json()
         return res.get("balance", 0.0)
     except Exception:
         return 0.0
 
-def fetch_otp_code(id_num: str):
+async def fetch_otp_code(id_num: str):
     url = f"https://vak-sms.com/api/getSmsCode/?apiKey={VAK_SMS_API_KEY}&idNum={id_num}"
     try:
-        return requests.get(url).json()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=5) as resp:
+                return await resp.json()
     except Exception as e:
         return {"error": str(e)}
 
@@ -396,7 +389,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         bot_bal = u_data.get("balance", 0.0)
         msg = f"<b>MY BALANCE:</b> <code>{bot_bal:.4f}</code> USDT {E_BAL}"
         if user_id == ADMIN_ID:
-            site_bal = get_vak_balance()
+            site_bal = await get_vak_balance()
             msg += f"\nPANEL BALANCE : <code>{site_bal:.4f}</code> USD\n{E_PANEL_BAL_REQ}"
         await update.message.reply_text(msg, parse_mode="HTML")
         return
@@ -423,7 +416,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(profile_msg, parse_mode="HTML")
         return
 
-    # COUNTRY SELECTION
     if text in ["🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝚈", "🌐 𝚂𝙴𝚃 𝙲𝙾𝚄𝙽𝚃𝚁𝙸𝙴𝚂"]:
         country_kb = [
             [KeyboardButton("COUNTRY: HK 🇭🇰 (HONG KONG)"), KeyboardButton("COUNTRY: CHILE 🇨🇱 (CL)")],
@@ -442,7 +434,6 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Country set: CHILE (CL) {E_CL} {E_UNBAN}", parse_mode="HTML", reply_markup=get_main_keyboard(user_id))
         return
 
-    # SERVICE SELECTION
     if text == "📱 𝚂𝙴𝚃 𝚂𝙴器件":
         service_kb = [
             [KeyboardButton("𝚂𝙴𝚁𝚅𝙸𝙲E: TG (𝚃𝙴𝙻𝙴𝙶𝚁𝙰𝙼)")],
@@ -495,7 +486,7 @@ async def handle_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML"
         )
 
-        res = buy_vak_number(service=service, country=country, max_price=0.087)
+        res = await buy_vak_number(service=service, country=country, max_price=0.087)
 
         if isinstance(res, dict) and "tel" in res and "idNum" in res:
             raw_phone = str(res["tel"])
@@ -673,7 +664,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data.startswith("check_otp_"):
         id_num = data.split("_")[2]
-        res = fetch_otp_code(id_num)
+        res = await fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
@@ -683,7 +674,7 @@ async def handle_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("cancel_num_"):
         id_num = data.split("_")[2]
         if id_num in active_orders:
-            set_number_status(id_num, "bad")
+            await set_number_status(id_num, "bad")
             order_data = active_orders.pop(id_num, None)
             
             try:
@@ -766,7 +757,7 @@ async def process_otp_success(context, id_num: str, otp: str):
     
     updated_user = get_user(uid)
     rem_bal = updated_user.get("balance", 0.0) if updated_user else 0.0
-    set_number_status(id_num, "end")
+    await set_number_status(id_num, "end")
 
     success_text = (
         f"OTP RECEIVE SUCCESSFUL! {E_UNBAN}\n\n"
@@ -788,7 +779,6 @@ async def process_otp_success(context, id_num: str, otp: str):
 
     masked_phone = mask_number(phone)
     
-    # Conditional formatting for group notification
     if country_code.lower() == "hk":
         group_forward_msg = (
             f"🌐 COUNTRY: HK {E_HK}\n"
@@ -821,7 +811,7 @@ async def auto_check_otp(context: ContextTypes.DEFAULT_TYPE, user_id: int, id_nu
         if id_num not in active_orders:
             break
 
-        res = fetch_otp_code(id_num)
+        res = await fetch_otp_code(id_num)
         if isinstance(res, dict) and "smsCode" in res and res["smsCode"]:
             otp = res["smsCode"]
             await process_otp_success(context, id_num, otp)
@@ -933,7 +923,6 @@ async def sub_screenshot_received(update: Update, context: ContextTypes.DEFAULT_
     await update.message.reply_text("✅ Apnar subscription request admin-er kache pathano hoyeche! Admin approve korlei bot active hoye jaabe.")
     return ConversationHandler.END
 
-# Admin Panel Conversation Handlers
 async def admin_ban_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -1288,7 +1277,6 @@ async def cancel_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Process batil kora hoyeche.")
     return ConversationHandler.END
 
-# Async Main Runner with All Admin, Subscription & Deposit Handlers
 async def run_bot():
     app = Application.builder().token(BOT_TOKEN).build()
 
